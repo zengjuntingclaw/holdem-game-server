@@ -1530,11 +1530,24 @@ function handleWsMessage(client, message) {
     if (!Number.isInteger(index) || index < 0 || index >= MAX_SEATS) {
       throw new Error("座位不存在");
     }
-    if (room.seats.some((seat) => seat && seat.userId === client.user.id)) {
-      throw new Error("你已经入座");
+    const currentIndex = room.seats.findIndex((seat) => seat && seat.userId === client.user.id);
+    if (currentIndex === index) {
+      throw new Error("你已经坐在这个座位");
     }
     if (room.seats[index]) {
       throw new Error("这个座位有人了");
+    }
+    if (currentIndex >= 0) {
+      if (isHandInProgress(room)) throw new Error("手牌进行中不能换座位");
+      const player = room.seats[currentIndex];
+      player.ready = false;
+      player.pendingAction = null;
+      player.result = "";
+      room.seats[currentIndex] = null;
+      room.seats[index] = player;
+      room.game.lastAction = `${client.user.username} 换到座位 ${index + 1}`;
+      broadcastRoom(room);
+      return;
     }
     room.seats[index] = {
       userId: client.user.id,
@@ -1558,6 +1571,8 @@ function handleWsMessage(client, message) {
       room.seats[index] = null;
       room.game.lastAction = `${client.user.username} 离座`;
       broadcastRoom(room);
+    } else if (index < 0) {
+      throw new Error("你还没有入座");
     } else {
       throw new Error("手牌进行中不能离座");
     }

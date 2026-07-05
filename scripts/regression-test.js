@@ -219,12 +219,26 @@ async function main() {
   await Promise.all(clients.map((client) => client.waitOpen()));
   for (const client of clients) client.send({ type: "joinRoom", roomId });
   await Promise.all(clients.map((client) => waitForRoom(client, (message) => message.room.id === roomId, "join room")));
-  log("WebSocket 进房同步正常");
+  const spectatorOnly = clients[3].latestRoomState();
+  assert.ok(spectatorOnly);
+  assert.equal(spectatorOnly.seats.filter(Boolean).length, 0);
+  log("WebSocket 进房同步正常，未入座也可观战");
 
   for (let seat = 0; seat < 3; seat += 1) {
     clients[seat].send({ type: "sit", seat });
     await waitForRoom(clients[seat], (message) => Boolean(message.seats[seat]), `sit ${seat}`);
   }
+  clients[0].send({ type: "sit", seat: 4 });
+  const movedOut = await waitForRoom(clients[0], (message) => !message.seats[0] && message.seats[4]?.userId === users[0].id, "move seat 0 to 4");
+  assert.equal(movedOut.seats[4].chips, 1000);
+  clients[0].send({ type: "sit", seat: 0 });
+  await waitForRoom(clients[0], (message) => message.seats[0]?.userId === users[0].id && !message.seats[4], "move seat 4 to 0");
+  clients[1].send({ type: "stand" });
+  await waitForRoom(clients[0], (message) => !message.seats[1], "stand from seat 1");
+  clients[1].send({ type: "sit", seat: 1 });
+  await waitForRoom(clients[0], (message) => message.seats[1]?.userId === users[1].id, "sit back seat 1");
+  log("非进行中可换座、起身，空位释放后可重新坐下");
+
   for (let seat = 0; seat < 3; seat += 1) {
     clients[seat].send({ type: "ready" });
   }

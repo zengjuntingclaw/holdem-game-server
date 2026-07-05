@@ -1,7 +1,7 @@
 "use strict";
 
 const $ = (selector) => document.querySelector(selector);
-const CLIENT_VERSION = "0.1.2";
+const CLIENT_VERSION = "0.1.3";
 const EMOTES = [
   { key: "wellPlayed", text: "打得不错" },
   { key: "amazing", text: "真棒" },
@@ -72,6 +72,7 @@ $("#refreshRoomsBtn").addEventListener("click", loadRooms);
 $("#backLobbyBtn").addEventListener("click", attemptBackLobby);
 $("#startHandBtn").addEventListener("click", () => send({ type: "startHand" }));
 $("#readyBtn").addEventListener("click", toggleReady);
+$("#standBtn").addEventListener("click", () => send({ type: "stand" }));
 $("#randomAvatarBtn").addEventListener("click", () => send({ type: "switchAvatar" }));
 $("#sendEmoteBtn").addEventListener("click", () => sendEmote());
 $("#dealerTipBtn").addEventListener("click", tipDealer);
@@ -788,6 +789,7 @@ function renderRoom() {
   $("#callBtn").textContent = callAmount > 0 ? `跟注 ${callAmount}` : "跟注";
   $("#readyBtn").textContent = mySeat?.ready ? "取消准备" : "准备";
   $("#readyBtn").disabled = !canReady;
+  $("#standBtn").disabled = !mySeat || activeHand;
   $("#checkBtn").disabled = !isMyTurn || callAmount > 0;
   $("#callBtn").disabled = !isMyTurn || callAmount === 0;
   $("#foldBtn").disabled = !isMyTurn;
@@ -801,7 +803,7 @@ function renderRoom() {
     ? "开始下一手"
     : `等待准备 ${snapshot.room.readySeats}/${snapshot.room.seats}`;
 
-  $("#seats").innerHTML = snapshot.seats.map((seat, index) => seatHtml(seat, index, snapshot.game)).join("");
+  $("#seats").innerHTML = snapshot.seats.map((seat, index) => seatHtml(seat, index, snapshot.game, mySeat, activeHand)).join("");
   $("#seats").querySelectorAll("[data-sit]").forEach((button) => {
     button.addEventListener("click", () => send({ type: "sit", seat: Number(button.dataset.sit) }));
   });
@@ -840,10 +842,12 @@ function renderPresetControls(snapshot, mySeat, activeHand) {
   $("#presetClearBtn").disabled = !canPreset || !pending;
 }
 
-function seatHtml(seat, index, game) {
+function seatHtml(seat, index, game, mySeat, activeHand) {
   const posClass = `pos${index}`;
   if (!seat) {
-    return `<div class="seat empty ${posClass}" data-seat="${index}"><button class="secondary" data-sit="${index}">坐下</button></div>`;
+    const disabled = mySeat && activeHand ? " disabled" : "";
+    const label = mySeat ? "换座" : "坐下";
+    return `<div class="seat empty ${posClass}" data-seat="${index}"><button class="secondary" data-sit="${index}"${disabled}>${label}</button></div>`;
   }
   const classes = ["seat", posClass];
   if (game.actingSeat === index) classes.push("active");
