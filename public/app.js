@@ -1,7 +1,7 @@
 "use strict";
 
 const $ = (selector) => document.querySelector(selector);
-const CLIENT_VERSION = "0.1.4";
+const CLIENT_VERSION = "0.1.5";
 const EMOTES = [
   { key: "wellPlayed", text: "打得不错" },
   { key: "amazing", text: "真棒" },
@@ -16,14 +16,14 @@ const CHIP_SOUND_URLS = [
   "/audio/chips-stack-1.ogg"
 ];
 const HAND_RULES = [
-  { name: "同花顺", power: 8, example: ["A♠", "K♠", "Q♠", "J♠", "T♠"], desc: "五张连续且同花的牌，皇家同花顺是最高同花顺。" },
+  { name: "同花顺", power: 8, example: ["A♠", "K♠", "Q♠", "J♠", "10♠"], desc: "五张连续且同花的牌，皇家同花顺是最高同花顺。" },
   { name: "四条", power: 7, example: ["9♠", "9♥", "9♦", "9♣", "A♠"], desc: "四张相同点数，加一张踢脚牌。" },
   { name: "葫芦", power: 6, example: ["K♠", "K♥", "K♦", "3♣", "3♠"], desc: "三条加一对，先比三条点数。" },
   { name: "同花", power: 5, example: ["A♥", "J♥", "8♥", "5♥", "2♥"], desc: "五张同花色，不要求连续。" },
   { name: "顺子", power: 4, example: ["9♠", "8♥", "7♦", "6♣", "5♠"], desc: "五张连续点数，A 可作最大或最小。" },
   { name: "三条", power: 3, example: ["Q♠", "Q♥", "Q♦", "A♣", "7♠"], desc: "三张相同点数，加两张踢脚牌。" },
   { name: "两对", power: 2, example: ["J♠", "J♥", "4♦", "4♣", "A♠"], desc: "两组对子，先比大对子。" },
-  { name: "一对", power: 1, example: ["T♠", "T♥", "A♦", "8♣", "3♠"], desc: "一组对子，剩余三张为踢脚牌。" },
+  { name: "一对", power: 1, example: ["10♠", "10♥", "A♦", "8♣", "3♠"], desc: "一组对子，剩余三张为踢脚牌。" },
   { name: "高牌", power: 0, example: ["A♠", "Q♥", "9♦", "6♣", "2♠"], desc: "没有组成以上牌型时，比最大单牌。" }
 ];
 const HAND_POWER = Object.fromEntries(HAND_RULES.map((rule) => [rule.name, rule.power]));
@@ -1377,7 +1377,8 @@ function cardHtml(card) {
   const suit = card[1];
   const suitText = { s: "♠", h: "♥", d: "♦", c: "♣" }[suit] || suit;
   const red = suit === "h" || suit === "d" ? " red" : "";
-  return `<span class="card${red}">${card[0]}${suitText}</span>`;
+  const rankText = card[0] === "T" ? "10" : card[0];
+  return `<span class="card${red}">${rankText}${suitText}</span>`;
 }
 
 function statusText(status) {
