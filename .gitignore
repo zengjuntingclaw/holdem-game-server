@@ -4,3 +4,4 @@ data/*.sqlite-*
 *.log
 __tmp_*
 node_modules/
+public/music/room-loop.mp3

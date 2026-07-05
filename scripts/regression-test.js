@@ -2,10 +2,15 @@
 
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const BASE_URL = process.env.BASE_URL || "http://127.0.0.1:3001";
 const WS_URL = BASE_URL.replace(/^http/, "ws") + "/ws";
 const RUN_ID = `${Date.now()}-${crypto.randomBytes(3).toString("hex")}`;
+const EXPECTED_ROOM_MUSIC_PATH = fs.existsSync(path.join(__dirname, "..", "public", "music", "room-loop.mp3"))
+  ? "/music/room-loop.mp3"
+  : "/music/room-loop.ogg";
 const activeSockets = new Set();
 
 function log(step) {
@@ -250,7 +255,7 @@ async function main() {
   assert.equal(started.version, version.version);
   assert.equal(started.game.music.mode, "single");
   assert.equal(started.game.music.tracks.length, 1);
-  assert.equal(started.game.music.tracks[0].url, "/music/room-loop.ogg");
+  assert.ok(started.game.music.tracks[0].url.startsWith(EXPECTED_ROOM_MUSIC_PATH));
   assert.equal(started.game.pot, 15);
   assert.equal(started.game.currentBet, 10);
   assert.equal(started.game.button, 0);

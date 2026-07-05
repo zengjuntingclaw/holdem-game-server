@@ -111,7 +111,7 @@ BGM 曲目来自 OpenGameArt，均为 CC0；授权说明保存在：
 public/music/OPEN_GAME_ART_MUSIC_LICENSES.txt
 ```
 
-大厅固定播放 `Heavenly Loop`；每个房间固定循环播放 `public/music/room-loop.ogg`，同一房间内的玩家会同步到同一首歌和相同进度。想替换房间音乐时，直接覆盖这个文件名即可。
+大厅固定播放 `Heavenly Loop`；每个房间会优先循环播放本地的 `public/music/room-loop.mp3`，没有这个文件时回退到仓库内置的 `public/music/room-loop.ogg`。同一房间内的玩家会同步到同一首歌和相同进度。`room-loop.mp3` 默认不提交到 Git，用于放置你自己有权使用的房间音乐。
 
 如果使用 Nginx 反向代理，需要转发 WebSocket：
 

@@ -52,7 +52,7 @@ const LOBBY_MUSIC = {
   ]
 };
 const ROOM_MUSIC_TRACKS = [
-  { id: "room-loop", name: "Room Loop", url: "/music/room-loop.ogg" }
+  roomLoopTrack()
 ];
 const DEALER_BLESSINGS = [
   "祝各位手气顺顺",
@@ -576,29 +576,99 @@ function serveStatic(req, res, url) {
     res.writeHead(403);
     return res.end("Forbidden");
   }
-  fs.readFile(filePath, (error, data) => {
-    if (error) {
+  fs.stat(filePath, (error, stat) => {
+    if (error || !stat.isFile()) {
       res.writeHead(404);
       return res.end("Not found");
     }
     const ext = path.extname(filePath).toLowerCase();
-    const type = {
-      ".html": "text/html; charset=utf-8",
-      ".css": "text/css; charset=utf-8",
-      ".js": "application/javascript; charset=utf-8",
-      ".png": "image/png",
-      ".jpg": "image/jpeg",
-      ".jpeg": "image/jpeg",
-      ".webp": "image/webp",
-      ".gif": "image/gif",
-      ".ogg": "audio/ogg",
-      ".mp3": "audio/mpeg",
-      ".wav": "audio/wav",
-      ".txt": "text/plain; charset=utf-8"
-    }[ext] || "application/octet-stream";
-    res.writeHead(200, { "content-type": type });
-    res.end(data);
+    const type = contentTypeFor(ext);
+    const headers = staticHeadersFor(ext, type, stat.size);
+    const range = req.headers.range;
+    if (range) {
+      const match = String(range).match(/^bytes=(\d*)-(\d*)$/);
+      if (!match) {
+        const errorHeaders = { ...headers, "content-range": `bytes */${stat.size}` };
+        delete errorHeaders["content-length"];
+        res.writeHead(416, errorHeaders);
+        return res.end();
+      }
+      let start = match[1] ? Number(match[1]) : 0;
+      let end = match[2] ? Number(match[2]) : stat.size - 1;
+      if (!match[1] && match[2]) {
+        const suffixLength = Number(match[2]);
+        start = Math.max(0, stat.size - suffixLength);
+        end = stat.size - 1;
+      }
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start < 0 || start >= stat.size) {
+        const errorHeaders = { ...headers, "content-range": `bytes */${stat.size}` };
+        delete errorHeaders["content-length"];
+        res.writeHead(416, errorHeaders);
+        return res.end();
+      }
+      end = Math.min(end, stat.size - 1);
+      res.writeHead(206, {
+        ...headers,
+        "content-length": end - start + 1,
+        "content-range": `bytes ${start}-${end}/${stat.size}`
+      });
+      if (req.method === "HEAD") return res.end();
+      return fs.createReadStream(filePath, { start, end }).pipe(res);
+    }
+    res.writeHead(200, headers);
+    if (req.method === "HEAD") return res.end();
+    fs.createReadStream(filePath).pipe(res);
   });
+}
+
+function contentTypeFor(ext) {
+  return {
+    ".html": "text/html; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".js": "application/javascript; charset=utf-8",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".ogg": "audio/ogg",
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".txt": "text/plain; charset=utf-8"
+  }[ext] || "application/octet-stream";
+}
+
+function staticHeadersFor(ext, type, size) {
+  const isAudio = [".ogg", ".mp3", ".wav"].includes(ext);
+  const isVersionedAsset = [".css", ".js", ".png", ".jpg", ".jpeg", ".webp", ".gif"].includes(ext);
+  return {
+    "content-type": type,
+    "content-length": size,
+    "accept-ranges": "bytes",
+    "cache-control": isAudio
+      ? "public, max-age=604800"
+      : isVersionedAsset
+      ? "public, max-age=3600"
+      : "no-store"
+  };
+}
+
+function roomLoopTrack() {
+  const mp3Path = path.join(PUBLIC_DIR, "music", "room-loop.mp3");
+  if (fs.existsSync(mp3Path)) {
+    return versionedMusicTrack("room-loop-mp3", "Room Loop", "/music/room-loop.mp3", mp3Path);
+  }
+  const oggPath = path.join(PUBLIC_DIR, "music", "room-loop.ogg");
+  return versionedMusicTrack("room-loop", "Room Loop", "/music/room-loop.ogg", oggPath);
+}
+
+function versionedMusicTrack(id, name, url, filePath) {
+  try {
+    const stat = fs.statSync(filePath);
+    return { id, name, url: `${url}?v=${Math.floor(stat.mtimeMs)}` };
+  } catch {
+    return { id, name, url };
+  }
 }
 
 function listAvatars() {
