@@ -229,6 +229,44 @@ p {
   gap: 14px;
 }
 
+.drinkSupport {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgb(215 184 90 / 28%);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgb(36 31 22 / 64%), rgb(14 22 28 / 72%));
+}
+
+.drinkSupport strong {
+  color: #ffe08a;
+}
+
+.drinkSupport p {
+  margin-top: 4px;
+  color: #c9d8d5;
+  font-size: 13px;
+}
+
+.drinkOptions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.drinkOptions span {
+  display: grid;
+  place-items: center;
+  min-height: 36px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 999px;
+  background: rgb(8 18 24 / 72%);
+  color: #fff8df;
+  font-weight: 800;
+  font-size: 13px;
+}
+
 .settingGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -258,6 +296,8 @@ p {
 
 #roomView {
   position: relative;
+  --turn-progress: 100%;
+  --turn-color: var(--accent);
 }
 
 .tableSurface {
@@ -415,6 +455,8 @@ p {
 }
 
 .turnCountdown {
+  --turn-progress: 100%;
+  --turn-color: var(--accent);
   position: absolute;
   left: 50%;
   top: 18%;
@@ -428,6 +470,22 @@ p {
   border-radius: 14px;
   background: rgb(8 20 27 / 84%);
   box-shadow: 0 18px 42px rgb(0 0 0 / 36%);
+  pointer-events: none;
+}
+
+.turnCountdown::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 18px;
+  padding: 4px;
+  background:
+    conic-gradient(var(--turn-color) var(--turn-progress), rgb(255 255 255 / 10%) 0);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
   pointer-events: none;
 }
 
@@ -452,6 +510,10 @@ p {
 .turnCountdown.urgent strong {
   color: #ff737b;
   animation: countdownPulse 0.72s ease-in-out infinite;
+}
+
+.turnCountdown.urgent {
+  animation: timerShake 0.24s linear infinite;
 }
 
 .settlementPanel {
@@ -592,6 +654,22 @@ p {
   box-shadow: 0 14px 30px rgb(0 0 0 / 26%);
 }
 
+.seat.active::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 18px;
+  padding: 3px;
+  background:
+    conic-gradient(var(--turn-color) var(--turn-progress), rgb(255 255 255 / 9%) 0);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
 .seat.empty {
   width: 92px;
   grid-template-columns: 1fr;
@@ -620,6 +698,10 @@ p {
 
 .seat.winnerPulse {
   animation: winnerPulse 0.9s ease-out;
+}
+
+.seat.timeWarning {
+  animation: seatTimeShake 0.32s linear infinite;
 }
 
 .seat.folded {
@@ -1202,50 +1284,163 @@ p {
 }
 
 @media (max-width: 860px) {
+  .shell {
+    width: min(100vw - 12px, 680px);
+    padding: 10px 0 18px;
+  }
+
   .layout,
   .playbar {
     grid-template-columns: 1fr;
+  }
+
+  .topbar {
+    align-items: stretch;
+  }
+
+  .topActions {
+    justify-content: space-between;
   }
 
   .tableHead {
     align-items: stretch;
   }
 
-  .boardLine,
   .topbar,
   .tableHead {
     flex-direction: column;
   }
 
+  #roomView {
+    overflow-x: clip;
+  }
+
   .seats {
-    position: static;
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 10px;
+    position: absolute;
+    inset: 0;
+    display: block;
   }
 
   .tableSurface {
-    min-height: 0;
-    border-radius: 20px;
-    padding: 14px;
+    min-height: clamp(430px, 118vw, 560px);
+    border-width: 8px;
+    border-radius: 42% / 36%;
+    padding: 10px;
   }
 
   .boardLine {
-    position: static;
-    width: auto;
-    transform: none;
-    margin-bottom: 14px;
+    position: absolute;
+    width: min(310px, 54vw);
+    min-height: 116px;
+    padding: 12px 14px;
+    gap: 12px;
     flex-direction: column;
   }
 
+  .boardLine .cards {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .card {
+    width: 34px;
+    border-radius: 6px;
+    font-size: 12px;
+  }
+
+  .pot {
+    min-width: 78px;
+    padding: 8px 12px;
+  }
+
+  .pot strong {
+    font-size: 26px;
+  }
+
+  .dealerSpot {
+    width: 54px;
+    min-width: 54px;
+    min-height: 54px;
+    border-radius: 13px;
+  }
+
+  .dealerSpot img {
+    border-radius: 10px;
+  }
+
   .seat {
-    position: static;
-    width: 100%;
-    transform: none;
+    position: absolute;
+    width: clamp(96px, 28vw, 126px);
+    min-height: 58px;
+    grid-template-columns: 36px 1fr;
+    gap: 6px;
+    padding: 6px;
+    border-radius: 10px;
+    transform: translate(-50%, -50%);
   }
 
   .seat.empty {
-    width: 100%;
+    width: 58px;
+    min-height: 34px;
+    padding: 4px;
+  }
+
+  .seat.empty button {
+    min-height: 28px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .seatAvatar {
+    width: 36px;
+  }
+
+  .seatTop {
+    gap: 5px;
+  }
+
+  .seatName {
+    max-width: 58px;
+    font-size: 12px;
+  }
+
+  .stack,
+  .badge,
+  .seat .hint {
+    font-size: 10px;
+  }
+
+  .seat .cards {
+    gap: 4px;
+  }
+
+  .seat .card {
+    width: 23px;
+    border-radius: 4px;
+    font-size: 10px;
+  }
+
+  .badges {
+    gap: 3px;
+  }
+
+  .badge {
+    padding: 2px 5px;
+  }
+
+  .turnCountdown {
+    top: 10%;
+    min-width: 112px;
+    padding: 9px 12px;
+  }
+
+  .turnCountdown strong {
+    font-size: 42px;
+  }
+
+  .playbar {
+    margin-top: 12px;
+    gap: 10px;
   }
 
   .actions {
@@ -1254,11 +1449,41 @@ p {
 
   .actions button,
   .actions input {
-    flex: 1 1 96px;
+    flex: 1 1 86px;
+    min-height: 44px;
+  }
+
+  .actions button {
+    min-height: 46px;
+    padding: 0 10px;
+  }
+
+  .chatForm {
+    grid-template-columns: 1fr;
+  }
+
+  .chatForm button {
+    width: 100%;
   }
 
   .emoteTools > * {
     flex: 1 1 120px;
+  }
+
+  .sideDrawer {
+    width: min(360px, calc(100vw - 42px));
+    transform: translateX(calc(100% - 42px));
+  }
+
+  .sideToggle {
+    width: 42px;
+    min-height: 82px;
+    font-size: 13px;
+  }
+
+  .rulesPanel {
+    margin-left: 42px;
+    padding: 16px;
   }
 }
 
@@ -1302,6 +1527,19 @@ p {
 @keyframes countdownPulse {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.12); }
+}
+
+@keyframes timerShake {
+  0%, 100% { transform: translateX(-50%) rotate(0deg); }
+  25% { transform: translateX(calc(-50% - 1px)) rotate(-0.7deg); }
+  75% { transform: translateX(calc(-50% + 1px)) rotate(0.7deg); }
+}
+
+@keyframes seatTimeShake {
+  0%, 100% { translate: 0 0; }
+  25% { translate: -1px 0; }
+  50% { translate: 1px 0; }
+  75% { translate: 0 -1px; }
 }
 
 @keyframes chipFly {

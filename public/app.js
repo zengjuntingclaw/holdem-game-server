@@ -49,7 +49,8 @@ const state = {
   bgmTimer: null,
   bgmMuted: localStorage.getItem("pokerBgmMuted") === "1",
   musicDurations: new Map(),
-  feedbackChallengeId: ""
+  feedbackChallengeId: "",
+  countdownAlertKey: ""
 };
 
 const authView = $("#authView");
@@ -631,6 +632,24 @@ function playChipSound(volume = 0.44) {
   source.start();
 }
 
+function playCountdownTick(seconds) {
+  const context = audioContext();
+  if (!context) return;
+  if (context.state !== "running") context.resume().catch(() => {});
+  const now = context.currentTime;
+  const gain = context.createGain();
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(seconds <= 2 ? 0.16 : 0.1, now + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+  gain.connect(context.destination);
+  const osc = context.createOscillator();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(seconds <= 2 ? 1046.5 : 880, now);
+  osc.connect(gain);
+  osc.start(now);
+  osc.stop(now + 0.18);
+}
+
 function playSettlementSound(power) {
   playChipSound(Math.min(0.72, 0.38 + power * 0.045));
   const context = audioContext();
@@ -705,7 +724,6 @@ function renderRoom() {
   $("#startHandBtn").textContent = snapshot.room.canStart
     ? "开始下一手"
     : `等待准备 ${snapshot.room.readySeats}/${snapshot.room.seats}`;
-  updateCountdown(snapshot, mySeat);
 
   $("#seats").innerHTML = snapshot.seats.map((seat, index) => seatHtml(seat, index, snapshot.game)).join("");
   $("#seats").querySelectorAll("[data-sit]").forEach((button) => {
@@ -718,6 +736,7 @@ function renderRoom() {
     });
   });
   renderSocialControls(snapshot, mySeat, activeHand);
+  updateCountdown(snapshot, mySeat);
   maybeAnimateSettlement(snapshot);
 
   $("#messages").innerHTML = snapshot.messages.map((message) => (
@@ -805,11 +824,34 @@ function updateCountdown(snapshot, mySeat) {
     const serverNow = Date.now() - state.serverOffsetMs;
     const remainingMs = Math.max(0, snapshot.game.turnDeadlineAt - serverNow);
     const seconds = Math.ceil(remainingMs / 1000);
+    const totalMs = Math.max(1000, snapshot.game.timeLimitMs || 30000);
+    const progress = Math.max(0, Math.min(1, remainingMs / totalMs));
+    const timerColor = progress > 0.5 ? "#35c486" : progress > 0.18 ? "#d7b85a" : "#de5962";
+    const isMine = acting.userId === mySeat?.userId;
     $("#turnCountdownName").textContent = acting.userId === mySeat?.userId ? "轮到你" : `轮到 ${acting.username}`;
     $("#turnCountdownValue").textContent = String(seconds).padStart(2, "0");
-    countdown.classList.toggle("mine", acting.userId === mySeat?.userId);
+    countdown.style.setProperty("--turn-progress", `${progress * 100}%`);
+    countdown.style.setProperty("--turn-color", timerColor);
+    roomView.style.setProperty("--turn-progress", `${progress * 100}%`);
+    roomView.style.setProperty("--turn-color", timerColor);
+    countdown.classList.toggle("mine", isMine);
     countdown.classList.toggle("urgent", seconds <= 5);
     countdown.classList.remove("hidden");
+    document.querySelectorAll(".seat").forEach((seat) => {
+      seat.classList.toggle("timeWarning", false);
+    });
+    const actingSeat = document.querySelector(`[data-seat="${snapshot.game.actingSeat}"]`);
+    if (actingSeat) {
+      actingSeat.classList.toggle("timeWarning", seconds <= 5);
+    }
+    if (isMine && seconds <= 5 && seconds > 0) {
+      const alertKey = `${snapshot.room.id}:${snapshot.game.handNumber}:${snapshot.game.actingSeat}:${seconds}`;
+      if (state.countdownAlertKey !== alertKey) {
+        state.countdownAlertKey = alertKey;
+        playCountdownTick(seconds);
+        if ("vibrate" in navigator) navigator.vibrate(seconds <= 2 ? 90 : 45);
+      }
+    }
     if (remainingMs <= 0) clearCountdown(false);
   };
   render();
@@ -923,6 +965,10 @@ function clearCountdown(hide = true) {
     clearInterval(state.countdownTimer);
     state.countdownTimer = null;
   }
+  state.countdownAlertKey = "";
+  document.querySelectorAll(".seat.timeWarning").forEach((seat) => seat.classList.remove("timeWarning"));
+  roomView.style.removeProperty("--turn-progress");
+  roomView.style.removeProperty("--turn-color");
   if (hide) $("#turnCountdown")?.classList.add("hidden");
 }
 
