@@ -1,7 +1,7 @@
 "use strict";
 
 const $ = (selector) => document.querySelector(selector);
-const CLIENT_VERSION = "0.1.3";
+const CLIENT_VERSION = "0.1.4";
 const EMOTES = [
   { key: "wellPlayed", text: "打得不错" },
   { key: "amazing", text: "真棒" },
