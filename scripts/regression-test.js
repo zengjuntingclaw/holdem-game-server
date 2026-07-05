@@ -228,7 +228,8 @@ async function main() {
   await Promise.all(raiseClients.map((client) => waitForRoom(client, (message) => message.room.id === raiseRoomResponse.room.id, "join raise room")));
   for (let seat = 0; seat < 3; seat += 1) {
     raiseClients[seat].send({ type: "sit", seat });
-    await waitForRoom(raiseClients[seat], (message) => Boolean(message.seats[seat]), `raise sit ${seat}`);
+    const raiseSit = await waitForRoom(raiseClients[seat], (message) => Boolean(message.seats[seat]), `raise sit ${seat}`);
+    assert.equal(raiseSit.seats[seat].ready, true);
     raiseClients[seat].send({ type: "ready" });
   }
   await waitForRoom(raiseClients[0], (message) => message.room.canStart, "raise room ready");
@@ -264,18 +265,22 @@ async function main() {
 
   for (let seat = 0; seat < 3; seat += 1) {
     clients[seat].send({ type: "sit", seat });
-    await waitForRoom(clients[seat], (message) => Boolean(message.seats[seat]), `sit ${seat}`);
+    const sat = await waitForRoom(clients[seat], (message) => Boolean(message.seats[seat]), `sit ${seat}`);
+    assert.equal(sat.seats[seat].ready, true);
   }
   clients[0].send({ type: "sit", seat: 4 });
   const movedOut = await waitForRoom(clients[0], (message) => !message.seats[0] && message.seats[4]?.userId === users[0].id, "move seat 0 to 4");
   assert.equal(movedOut.seats[4].chips, 1000);
+  assert.equal(movedOut.seats[4].ready, true);
   clients[0].send({ type: "sit", seat: 0 });
-  await waitForRoom(clients[0], (message) => message.seats[0]?.userId === users[0].id && !message.seats[4], "move seat 4 to 0");
+  const movedBack = await waitForRoom(clients[0], (message) => message.seats[0]?.userId === users[0].id && !message.seats[4], "move seat 4 to 0");
+  assert.equal(movedBack.seats[0].ready, true);
   clients[1].send({ type: "stand" });
   await waitForRoom(clients[0], (message) => !message.seats[1], "stand from seat 1");
   clients[1].send({ type: "sit", seat: 1 });
-  await waitForRoom(clients[0], (message) => message.seats[1]?.userId === users[1].id, "sit back seat 1");
-  log("非进行中可换座、起身，空位释放后可重新坐下");
+  const satBack = await waitForRoom(clients[0], (message) => message.seats[1]?.userId === users[1].id, "sit back seat 1");
+  assert.equal(satBack.seats[1].ready, true);
+  log("入座默认准备，非进行中可换座、起身，空位释放后可重新坐下");
 
   for (let seat = 0; seat < 3; seat += 1) {
     clients[seat].send({ type: "ready" });
@@ -334,6 +339,7 @@ async function main() {
   const lateJoin = await waitForRoom(clients[3], (message) => Boolean(message.seats[3]), "late sit");
   assert.equal(lateJoin.seats[3].inHand, false);
   assert.equal(lateJoin.seats[3].hole.length, 0);
+  assert.equal(lateJoin.seats[3].ready, true);
   assert.ok(!lateJoin.spectators.some((spectator) => spectator.userId === users[3].id));
   log("牌局中有空位可入座，但新玩家不会加入当前手牌");
 

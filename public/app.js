@@ -1,7 +1,7 @@
 "use strict";
 
 const $ = (selector) => document.querySelector(selector);
-const CLIENT_VERSION = "0.1.11";
+const CLIENT_VERSION = "0.1.12";
 const DEFAULT_WAGER_AMOUNT = 20;
 const EMOTES = [
   { key: "wellPlayed", text: "打得不错" },

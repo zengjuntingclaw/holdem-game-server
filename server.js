@@ -1655,7 +1655,7 @@ function handleWsMessage(client, message) {
     if (currentIndex >= 0) {
       if (isHandInProgress(room)) throw new Error("手牌进行中不能换座位");
       const player = room.seats[currentIndex];
-      player.ready = false;
+      player.ready = true;
       player.pendingAction = null;
       player.result = "";
       room.seats[currentIndex] = null;
@@ -1674,11 +1674,11 @@ function handleWsMessage(client, message) {
       folded: false,
       allIn: false,
       inHand: false,
-      ready: false,
+      ready: true,
       pendingAction: null,
       result: ""
     };
-    room.game.lastAction = `${client.user.username} 入座`;
+    room.game.lastAction = `${client.user.username} 入座并自动准备`;
     broadcastRoom(room);
   } else if (payload.type === "stand") {
     const index = room.seats.findIndex((seat) => seat && seat.userId === client.user.id);
