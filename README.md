@@ -12,7 +12,7 @@
 - 未入座可进入房间观战；非手牌进行中可起身或直接换座
 - fold / check / call / bet / raise
 - 摊牌比牌、主池 / 边池结算
-- 30 秒行动倒计时，超时自动过牌或弃牌
+- 1 分钟行动倒计时，超时自动过牌；如果需要跟注则自动弃牌
 - 断线后保留座位，重连后可回到房间继续
 - 未轮到自己时可提前预设弃牌、过牌 / 跟注、下注 / 加注
 - 离线玩家会显示离线，轮到离线玩家时默认不加注：能过牌就过牌，需要跟注则弃牌
@@ -49,10 +49,16 @@ npm run test:regression
 
 ## 部署
 
-把 `poker-server` 目录上传到服务器，安装 Node.js 后执行：
+把 `poker-server` 目录上传到服务器，安装 Node.js 后执行一键重启脚本：
 
 ```bash
-PORT=3000 node server.js
+bash scripts/restart.sh
+```
+
+脚本默认监听 `0.0.0.0:6565`，日志写入 `server.log`，进程号写入 `server.pid`。如果要临时换端口：
+
+```bash
+PORT=3000 bash scripts/restart.sh
 ```
 
 ## 邮箱验证码配置
@@ -118,7 +124,7 @@ public/music/OPEN_GAME_ART_MUSIC_LICENSES.txt
 
 ```nginx
 location / {
-    proxy_pass http://127.0.0.1:3000;
+    proxy_pass http://127.0.0.1:6565;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";

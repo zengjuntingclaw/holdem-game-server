@@ -1,7 +1,8 @@
 "use strict";
 
 const $ = (selector) => document.querySelector(selector);
-const CLIENT_VERSION = "0.1.8";
+const CLIENT_VERSION = "0.1.9";
+const DEFAULT_WAGER_AMOUNT = 20;
 const EMOTES = [
   { key: "wellPlayed", text: "打得不错" },
   { key: "amazing", text: "真棒" },
@@ -53,7 +54,8 @@ const state = {
   feedbackChallengeId: "",
   countdownAlertKey: "",
   version: CLIENT_VERSION,
-  lastRoomId: localStorage.getItem("pokerLastRoomId") || ""
+  lastRoomId: localStorage.getItem("pokerLastRoomId") || "",
+  lastWagerAmount: Number(localStorage.getItem("pokerLastWagerAmount") || DEFAULT_WAGER_AMOUNT)
 };
 
 const authView = $("#authView");
@@ -269,7 +271,7 @@ function connect() {
         state.lastRoomId = "";
         renderResumeRoom();
       }
-      alert(message.error);
+      showToast(message.error, "warn");
     }
   });
 }
@@ -284,17 +286,26 @@ function send(payload) {
 }
 
 function sendAction(action) {
-  send({ type: "action", action, amount: Number($("#amountInput").value || 0) });
+  send({ type: "action", action, amount: normalizedWagerAmount() });
 }
 
 function sendPresetAction(action) {
-  send({ type: "presetAction", action, amount: Number($("#amountInput").value || 0) });
+  send({ type: "presetAction", action, amount: normalizedWagerAmount() });
+}
+
+function normalizedWagerAmount() {
+  const range = $("#amountRange");
+  const min = Number(range.min || 1);
+  const max = Number(range.max || min);
+  const amount = clampNumber(Number($("#amountInput").value || state.lastWagerAmount || min), min, max);
+  setBetAmount(amount);
+  return amount;
 }
 
 function syncAmountFromRange() {
   const range = $("#amountRange");
   $("#amountInput").value = range.value;
-  updateAmountValue(Number(range.value));
+  rememberWagerAmount(Number(range.value));
 }
 
 function syncAmountFromInput() {
@@ -305,7 +316,7 @@ function syncAmountFromInput() {
   const value = clampNumber(Number(input.value || min), min, max);
   input.value = value;
   range.value = value;
-  updateAmountValue(value);
+  rememberWagerAmount(value);
 }
 
 function chooseBetMultiple(multiple) {
@@ -332,11 +343,18 @@ function setBetAmount(amount) {
   const value = clampNumber(Math.floor(Number(amount) || min), min, max);
   range.value = value;
   $("#amountInput").value = value;
-  updateAmountValue(value);
+  rememberWagerAmount(value);
 }
 
 function updateAmountValue(value) {
   $("#amountValue").textContent = Number.isFinite(value) ? String(Math.floor(value)) : "0";
+}
+
+function rememberWagerAmount(value) {
+  const amount = Math.max(1, Math.floor(Number(value) || DEFAULT_WAGER_AMOUNT));
+  state.lastWagerAmount = amount;
+  localStorage.setItem("pokerLastWagerAmount", String(amount));
+  updateAmountValue(amount);
 }
 
 function clampNumber(value, min, max) {
@@ -347,7 +365,8 @@ function clampNumber(value, min, max) {
 function minimumWagerTotal(snapshot, mySeat) {
   if (!mySeat) return Math.max(1, snapshot?.room?.bigBlind || 1);
   if (snapshot.game.currentBet > 0) {
-    return Math.min(mySeat.bet + mySeat.chips, snapshot.game.currentBet + snapshot.game.minRaise);
+    const minRaise = Number(snapshot.game.minRaise || snapshot.room.bigBlind || 1);
+    return Math.min(mySeat.bet + mySeat.chips, snapshot.game.currentBet + minRaise);
   }
   return Math.min(mySeat.bet + mySeat.chips, snapshot.room.bigBlind);
 }
@@ -448,7 +467,7 @@ function showRoom() {
 
 function attemptBackLobby() {
   if (isMySeatLocked()) {
-    alert("手牌进行中不能退出房间。关闭页面只会显示离线，座位和筹码仍由服务器保留。");
+    showToast("手牌进行中不能退出房间。关闭页面只会显示离线，座位和筹码仍由服务器保留。", "warn");
     return;
   }
   showLobby();
@@ -466,7 +485,7 @@ function toggleReady() {
   if (!snapshot || !state.user) return;
   const mySeat = snapshot.seats.find((seat) => seat && seat.userId === state.user.id);
   if (!mySeat) {
-    alert("先坐下，再准备。");
+    showToast("先坐下，再准备。", "warn");
     return;
   }
   send({ type: mySeat.ready ? "unready" : "ready" });
@@ -474,6 +493,23 @@ function toggleReady() {
 
 function setConn(text) {
   $("#connLabel").textContent = text;
+}
+
+function showToast(message, tone = "info") {
+  const stack = $("#toastStack");
+  if (!stack || !message) return;
+  const toast = document.createElement("div");
+  toast.className = `softToast ${tone}`;
+  toast.innerHTML = `
+    <div class="softToastText">${escapeHtml(message)}</div>
+    <div class="softToastBar"></div>
+  `;
+  stack.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add("show"));
+  setTimeout(() => {
+    toast.classList.remove("show");
+    setTimeout(() => toast.remove(), 220);
+  }, 3200);
 }
 
 function setVersionLabel(version) {
@@ -901,7 +937,7 @@ function renderWagerControls(snapshot, mySeat, isMyTurn, activeHand) {
   const canAdjust = Boolean(mySeat) && activeHand && mySeat.inHand && !mySeat.folded && !mySeat.allIn && min <= max;
   const range = $("#amountRange");
   const input = $("#amountInput");
-  const current = clampNumber(Number(input.value || min), min, max);
+  const current = clampNumber(Number(state.lastWagerAmount || input.value || min), min, max);
   range.min = min;
   range.max = max;
   range.step = 1;
@@ -1024,7 +1060,7 @@ function updateCountdown(snapshot, mySeat) {
     const serverNow = Date.now() - state.serverOffsetMs;
     const remainingMs = Math.max(0, snapshot.game.turnDeadlineAt - serverNow);
     const seconds = Math.ceil(remainingMs / 1000);
-    const totalMs = Math.max(1000, snapshot.game.timeLimitMs || 30000);
+    const totalMs = Math.max(1000, snapshot.game.timeLimitMs || 60000);
     const progress = Math.max(0, Math.min(1, remainingMs / totalMs));
     const timerColor = progress > 0.5 ? "#35c486" : progress > 0.18 ? "#d7b85a" : "#de5962";
     const isMine = acting.userId === mySeat?.userId;
@@ -1177,7 +1213,7 @@ function openEmoteMenu(targetSeat) {
   if (!snapshot || !state.user) return;
   const mySeat = snapshot.seats.find((seat) => seat && seat.userId === state.user.id);
   if (!mySeat) {
-    alert("先坐下，再互动。");
+    showToast("先坐下，再互动。", "warn");
     return;
   }
   const explicitTargetSeat = Number.isInteger(targetSeat) && targetSeat !== mySeat.seat ? targetSeat : null;
@@ -1233,11 +1269,11 @@ function openDealerTipMenu() {
   if (!snapshot || !state.user) return;
   const mySeat = snapshot.seats.find((seat) => seat && seat.userId === state.user.id);
   if (!mySeat) {
-    alert("先坐下，再打赏荷官。");
+    showToast("先坐下，再打赏荷官。", "warn");
     return;
   }
   if (!["waiting", "showdown"].includes(snapshot.game.status)) {
-    alert("手牌进行中不能打赏，以免影响下注筹码。");
+    showToast("手牌进行中不能打赏，以免影响下注筹码。", "warn");
     return;
   }
   closeEmoteMenu();

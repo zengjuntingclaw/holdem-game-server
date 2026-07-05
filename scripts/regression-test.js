@@ -217,6 +217,30 @@ async function main() {
   assert.match(avatarImage.headers.get("content-type") || "", /^image\//);
   log("默认头像列表和静态头像文件可访问");
 
+  const raiseRoomResponse = await api("/api/rooms", {
+    token: users[0].token,
+    method: "POST",
+    body: { name: `加注测试 ${RUN_ID}`, smallBlind: 5, bigBlind: 10, startingChips: 1000 }
+  });
+  const raiseClients = users.slice(0, 3).map(connectClient);
+  await Promise.all(raiseClients.map((client) => client.waitOpen()));
+  for (const client of raiseClients) client.send({ type: "joinRoom", roomId: raiseRoomResponse.room.id });
+  await Promise.all(raiseClients.map((client) => waitForRoom(client, (message) => message.room.id === raiseRoomResponse.room.id, "join raise room")));
+  for (let seat = 0; seat < 3; seat += 1) {
+    raiseClients[seat].send({ type: "sit", seat });
+    await waitForRoom(raiseClients[seat], (message) => Boolean(message.seats[seat]), `raise sit ${seat}`);
+    raiseClients[seat].send({ type: "ready" });
+  }
+  await waitForRoom(raiseClients[0], (message) => message.room.canStart, "raise room ready");
+  raiseClients[0].send({ type: "startHand" });
+  await waitForRoom(raiseClients[0], (message) => message.game.status === "preflop" && message.game.actingSeat === 0, "raise room preflop");
+  raiseClients[0].send({ type: "action", action: "raise", amount: 20 });
+  const raisedState = await waitForRoom(raiseClients[0], (message) => message.game.currentBet === 20 && message.seats[0]?.bet === 20, "legal raise to 20");
+  assert.equal(raisedState.game.minRaise, 10);
+  assert.equal(raisedState.game.pot, 35);
+  raiseClients.forEach((client) => client.socket.close());
+  log("合法加注金额可成功提交并广播");
+
   const roomResponse = await api("/api/rooms", {
     token: users[0].token,
     method: "POST",
@@ -266,10 +290,11 @@ async function main() {
   assert.ok(started.game.music.tracks[0].url.startsWith(EXPECTED_ROOM_MUSIC_PATH));
   assert.equal(started.game.pot, 15);
   assert.equal(started.game.currentBet, 10);
+  assert.equal(started.game.minRaise, 10);
   assert.equal(started.game.button, 0);
   assert.equal(started.seats[1].bet, 5);
   assert.equal(started.seats[2].bet, 10);
-  assert.equal(started.game.timeLimitMs, 30000);
+  assert.equal(started.game.timeLimitMs, 60000);
   assert.ok(started.game.turnDeadlineAt > started.game.serverNow);
   await Promise.all([
     clients[0].waitFor((message) => message.type === "interaction" && message.interaction.kind === "chipsToPot" && message.interaction.fromSeat === 1, "small blind animation"),
@@ -278,7 +303,7 @@ async function main() {
   const blindAnimations = clients[0].messages.filter((message) => message.type === "interaction" && message.interaction.kind === "chipsToPot");
   assert.ok(blindAnimations.some((message) => message.interaction.fromSeat === 1 && message.interaction.amount === 5));
   assert.ok(blindAnimations.some((message) => message.interaction.fromSeat === 2 && message.interaction.amount === 10));
-  log("开局、庄位/大小盲、30 秒计时和盲注筹码动画广播正常");
+  log("开局、庄位/大小盲、60 秒计时和盲注筹码动画广播正常");
 
   for (let seat = 0; seat < 3; seat += 1) {
     const state = await waitForRoom(clients[seat], (message) => message.game.status === "preflop", `visibility ${seat}`);

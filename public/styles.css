@@ -184,6 +184,58 @@ p {
   font-size: 13px;
 }
 
+.toastStack {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 200;
+  display: grid;
+  gap: 10px;
+  width: min(360px, calc(100vw - 36px));
+  pointer-events: none;
+}
+
+.softToast {
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 8px;
+  background: rgb(35 43 50 / 92%);
+  color: #edf4f0;
+  box-shadow: 0 18px 38px rgb(0 0 0 / 30%);
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.softToast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.softToast.warn {
+  border-color: rgb(215 184 90 / 35%);
+}
+
+.softToastText {
+  padding: 12px 14px 10px;
+  color: #dce8e5;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.softToastBar {
+  height: 3px;
+  width: 100%;
+  background: linear-gradient(90deg, #9fb0ae, #d7b85a);
+  transform-origin: left center;
+  animation: toastDrain 3.2s linear forwards;
+}
+
+@keyframes toastDrain {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
 .topbar,
 .tableHead,
 .sectionHead {
@@ -865,7 +917,7 @@ p {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 14px;
-  align-items: center;
+  align-items: start;
   border-color: rgb(74 103 118 / 72%);
   background:
     linear-gradient(135deg, rgb(26 39 48 / 94%), rgb(16 24 31 / 94%));
@@ -889,7 +941,7 @@ p {
   display: grid;
   grid-template-columns: auto minmax(300px, 380px) auto;
   gap: 10px;
-  align-items: center;
+  align-items: start;
   justify-content: flex-end;
 }
 
@@ -897,7 +949,7 @@ p {
 .actionButtons {
   display: flex;
   gap: 8px;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -1650,10 +1702,12 @@ p {
     grid-template-columns: 1fr;
     margin-top: 12px;
     gap: 10px;
+    align-items: start;
   }
 
   .actions {
     grid-template-columns: 1fr;
+    align-items: start;
     justify-content: stretch;
   }
 

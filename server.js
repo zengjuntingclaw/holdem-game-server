@@ -25,7 +25,7 @@ const MAX_SEATS = 9;
 const STARTING_CHIPS = 1000;
 const SMALL_BLIND = 5;
 const BIG_BLIND = 10;
-const TURN_TIME_MS = clampConfigInt(process.env.TURN_TIME_MS, 30000, 1000, 120000);
+const TURN_TIME_MS = clampConfigInt(process.env.TURN_TIME_MS, 60000, 1000, 120000);
 const EMOTE_COOLDOWN_MS = clampConfigInt(process.env.EMOTE_COOLDOWN_MS, 2500, 500, 60000);
 const CHAT_COOLDOWN_MS = clampConfigInt(process.env.CHAT_COOLDOWN_MS, 3000, 500, 60000);
 const DEALER_TIP_COOLDOWN_MS = clampConfigInt(process.env.DEALER_TIP_COOLDOWN_MS, 2000, 500, 60000);
@@ -1491,6 +1491,7 @@ function roomStateFor(room, viewerId) {
       pot: room.game.pot,
       dealerTips: room.dealerTips || 0,
       currentBet: room.game.currentBet,
+      minRaise: room.game.minRaise,
       actingSeat: room.game.actingSeat,
       turnStartedAt: room.game.turnStartedAt || 0,
       turnDeadlineAt: room.game.turnDeadlineAt || 0,

@@ -1,6 +1,6 @@
 {
   "name": "minimal-texas-holdem-server",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "private": true,
   "description": "A zero-dependency Texas Hold'em MVP server with SQLite users, email login codes, rooms, and realtime WebSocket play.",
   "main": "server.js",
