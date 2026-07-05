@@ -34,7 +34,10 @@ const APP_VERSION = process.env.APP_VERSION || packageInfo.version || "0.1.0";
 const DATA_DIR = path.join(__dirname, "data");
 const DB_FILE = path.join(DATA_DIR, "poker.sqlite");
 const PUBLIC_DIR = path.join(__dirname, "public");
-const AVATAR_DIR = path.join(__dirname, "..", "default_user_face");
+const AVATAR_DIRS = [
+  path.join(PUBLIC_DIR, "avatars", "default"),
+  path.join(__dirname, "..", "default_user_face")
+];
 const AVATAR_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]);
 const EMOTES = new Map([
   ["wellPlayed", "打得不错"],
@@ -672,13 +675,22 @@ function versionedMusicTrack(id, name, url, filePath) {
 }
 
 function listAvatars() {
-  try {
-    return fs.readdirSync(AVATAR_DIR)
-      .filter((name) => AVATAR_EXTENSIONS.has(path.extname(name).toLowerCase()))
-      .map((name) => ({ name, url: `/avatars/${encodeURIComponent(name)}` }));
-  } catch {
-    return [];
+  const seen = new Set();
+  const avatars = [];
+  for (const dir of AVATAR_DIRS) {
+    try {
+      for (const name of fs.readdirSync(dir)) {
+        if (seen.has(name) || !AVATAR_EXTENSIONS.has(path.extname(name).toLowerCase())) continue;
+        const filePath = path.join(dir, name);
+        if (!fs.statSync(filePath).isFile()) continue;
+        seen.add(name);
+        avatars.push({ name, url: `/avatars/${encodeURIComponent(name)}` });
+      }
+    } catch {
+      // Missing optional avatar directory is fine.
+    }
   }
+  return avatars;
 }
 
 function isAllowedAvatar(name) {
@@ -695,11 +707,11 @@ function randomAvatar(except = "") {
 
 function serveAvatar(req, res, url) {
   const requested = decodeURIComponent(url.pathname.slice("/avatars/".length));
-  if (!isAllowedAvatar(requested)) {
+  const filePath = avatarFilePath(requested);
+  if (!filePath) {
     res.writeHead(404);
     return res.end("Not found");
   }
-  const filePath = path.join(AVATAR_DIR, requested);
   fs.readFile(filePath, (error, data) => {
     if (error) {
       res.writeHead(404);
@@ -716,6 +728,21 @@ function serveAvatar(req, res, url) {
     res.writeHead(200, { "content-type": type, "cache-control": "public, max-age=3600" });
     res.end(data);
   });
+}
+
+function avatarFilePath(name) {
+  if (!name || path.basename(name) !== name || !AVATAR_EXTENSIONS.has(path.extname(name).toLowerCase())) {
+    return null;
+  }
+  for (const dir of AVATAR_DIRS) {
+    const filePath = path.join(dir, name);
+    try {
+      if (fs.statSync(filePath).isFile()) return filePath;
+    } catch {
+      // Try the next avatar directory.
+    }
+  }
+  return null;
 }
 
 function normalizeRoomSettings(body) {

@@ -209,6 +209,14 @@ async function main() {
   }
   log("注册/邮箱验证码/验证后登录流程正常，未验证登录会被拒绝");
 
+  const avatarResponse = await api("/api/avatars", { token: users[0].token });
+  assert.ok(Array.isArray(avatarResponse.avatars));
+  assert.ok(avatarResponse.avatars.length >= 1);
+  const avatarImage = await fetch(`${BASE_URL}${avatarResponse.avatars[0].url}`);
+  assert.equal(avatarImage.status, 200);
+  assert.match(avatarImage.headers.get("content-type") || "", /^image\//);
+  log("默认头像列表和静态头像文件可访问");
+
   const roomResponse = await api("/api/rooms", {
     token: users[0].token,
     method: "POST",

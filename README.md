@@ -91,12 +91,13 @@ SMTP_SECURE=true
 data/poker.sqlite
 ```
 
-默认头像读取项目上一级的 `default_user_face` 目录，支持 `.png`、`.jpg`、`.jpeg`、`.webp`、`.gif`。例如当前结构可以是：
+默认头像已经随项目放在 `public/avatars/default`，部署到服务器后不需要额外拷贝头像文件。服务器也会兼容读取项目上一级的 `default_user_face` 目录，支持 `.png`、`.jpg`、`.jpeg`、`.webp`、`.gif`，方便本地临时替换素材。例如可选结构是：
 
 ```text
 视觉模型记牌器/
   default_user_face/
   poker-server/
+    public/avatars/default/
 ```
 
 筹码音效来自 Kenney Casino Audio，授权为 CC0；授权文件保存在：
