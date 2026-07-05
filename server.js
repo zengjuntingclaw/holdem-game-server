@@ -467,8 +467,9 @@ async function createAndSendEmailCode(email) {
     console.log(`[DEV EMAIL CODE] ${email}: ${code}`);
     return {
       sent: false,
-      devCode: process.env.NODE_ENV === "production" ? undefined : code,
-      message: "SMTP 未配置，验证码已打印到服务端日志"
+      localCodeMode: true,
+      devCode: code,
+      message: "SMTP 未配置，已切换本地验证码模式"
     };
   }
 
