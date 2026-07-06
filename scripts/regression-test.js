@@ -49,29 +49,19 @@ async function expectApiError(path, status, options = {}) {
 
 async function createVerifiedUser(index) {
   const email = `regression-${RUN_ID}-${index}@example.test`;
-  const password = `pass-${RUN_ID}`;
   const username = `测${index}${RUN_ID.slice(-3)}`;
-  const registered = await api("/api/register", {
+  const requested = await api("/api/email-code/request", {
     method: "POST",
-    body: { email, username, password }
+    body: { email }
   });
-  assert.equal(registered.requiresVerification, true);
-  assert.match(registered.devCode || "", /^\d{6}$/);
-  await expectApiError("/api/login", 403, {
-    method: "POST",
-    body: { email, password }
-  });
+  assert.match(requested.devCode || "", /^\d{6}$/);
   const verified = await api("/api/email-code/verify", {
     method: "POST",
-    body: { email, code: registered.devCode }
+    body: { email, code: requested.devCode, username }
   });
   assert.ok(verified.token);
-  const loggedIn = await api("/api/login", {
-    method: "POST",
-    body: { email, password }
-  });
-  assert.ok(loggedIn.token);
-  return { ...loggedIn.user, email, password, token: loggedIn.token };
+  assert.equal(verified.user.username, username);
+  return { ...verified.user, email, token: verified.token };
 }
 
 function connectClient(user) {
@@ -207,7 +197,18 @@ async function main() {
   for (let i = 0; i < 4; i += 1) {
     users.push(await createVerifiedUser(i));
   }
-  log("注册/邮箱验证码/验证后登录流程正常，未验证登录会被拒绝");
+  const persistedSession = await api("/api/me", { token: users[0].token });
+  assert.equal(persistedSession.user.id, users[0].id);
+  const renamed = await api("/api/me", {
+    token: users[0].token,
+    method: "PATCH",
+    body: { username: `改名${RUN_ID.slice(-3)}` }
+  });
+  assert.equal(renamed.user.id, users[0].id);
+  assert.equal(renamed.user.email, users[0].email);
+  assert.equal(renamed.user.username, `改名${RUN_ID.slice(-3)}`);
+  users[0].username = renamed.user.username;
+  log("邮箱验证码登录、会话保持和昵称修改正常");
 
   const avatarResponse = await api("/api/avatars", { token: users[0].token });
   assert.ok(Array.isArray(avatarResponse.avatars));
@@ -247,6 +248,8 @@ async function main() {
     method: "POST",
     body: { name: `短全下测试 ${RUN_ID}`, smallBlind: 5, bigBlind: 10, startingChips: 200 }
   });
+  const activeLookup = await api(`/api/rooms/${shortAllInRoomResponse.room.id}`, { token: users[0].token });
+  assert.equal(activeLookup.room.id, shortAllInRoomResponse.room.id);
   const shortClients = users.map(connectClient);
   await Promise.all(shortClients.map((client) => client.waitOpen()));
   for (const client of shortClients) client.send({ type: "joinRoom", roomId: shortAllInRoomResponse.room.id });
@@ -265,6 +268,10 @@ async function main() {
     shortClients[2].waitFor((message) => message.type === "error", "dealer tip error", 5000)
   ]);
   assert.notEqual(tipResult.type, "error", tipResult.error || "dealer tip should prepare short stack");
+  const tipHistory = await api(`/api/history/dealer-tips?roomId=${shortAllInRoomResponse.room.id}`, { token: users[0].token });
+  assert.equal(tipHistory.tips.some((tip) => tip.room_id === shortAllInRoomResponse.room.id), false);
+  await expectApiError(`/api/history/rooms/${shortAllInRoomResponse.room.id}`, 404, { token: users[0].token });
+  log("测试房间不会写入历史流水");
   await waitForRoom(shortClients[0], (message) => message.room.canStart, "short all-in room ready");
   shortClients[0].send({ type: "startHand" });
   await waitForRoom(shortClients[0], (message) => message.game.status === "preflop" && message.game.actingSeat === 3, "short all-in preflop");
@@ -419,6 +426,12 @@ async function main() {
   assert.equal(targetEmote.interaction.targetSeat, 1);
   log("点名互动会广播目标和“你 + 台词”文案");
 
+  await new Promise((resolve) => setTimeout(resolve, 2600));
+  clients[1].send({ type: "emote", emote: "bluff", targetSeat: 0 });
+  const bluffEmote = await clients[0].waitFor((message) => message.type === "interaction" && message.interaction.kind === "emote" && message.interaction.emote === "bluff", "bluff emote");
+  assert.equal(bluffEmote.interaction.text, "你这是诈唬吧");
+  log("诈唬快捷互动正常");
+
   clients[2].socket.close();
   const offlineState = await waitForRoom(clients[0], (message) => message.seats[2] && !message.seats[2].connected, "seat 2 offline");
   assert.equal(offlineState.seats[2].connected, false);
@@ -438,6 +451,8 @@ async function main() {
   for (const seat of showdown.seats.filter((item) => item?.inHand)) {
     assert.ok(seat.hole.every((card) => /^[2-9TJQKA][shdc]$/.test(card)), "all hole cards should reveal at showdown");
   }
+  await expectApiError(`/api/records/rooms/${roomId}?actions=1000&hands=200`, 404, { token: users[0].token });
+  log("测试牌局不会写入训练流水");
   log("下注轮转、发公共牌、摊牌、奖池归零、筹码守恒和公平证明公开正常");
 
   const autoTexts = clients[0].messages

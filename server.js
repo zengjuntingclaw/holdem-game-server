@@ -31,6 +31,7 @@ const CHAT_COOLDOWN_MS = clampConfigInt(process.env.CHAT_COOLDOWN_MS, 3000, 500,
 const DEALER_TIP_COOLDOWN_MS = clampConfigInt(process.env.DEALER_TIP_COOLDOWN_MS, 2000, 500, 60000);
 const FEEDBACK_COOLDOWN_MS = clampConfigInt(process.env.FEEDBACK_COOLDOWN_MS, 30000, 3000, 300000);
 const AUTO_NEXT_HAND_DELAY_MS = clampConfigInt(process.env.AUTO_NEXT_HAND_DELAY_MS, 6000, 1000, 30000);
+const SESSION_TTL_MS = clampConfigInt(process.env.SESSION_TTL_MS, 30 * 24 * 60 * 60 * 1000, 60 * 60 * 1000, 365 * 24 * 60 * 60 * 1000);
 const APP_VERSION = process.env.APP_VERSION || packageInfo.version || "0.1.0";
 const DATA_DIR = path.join(__dirname, "data");
 const DB_FILE = path.join(DATA_DIR, "poker.sqlite");
@@ -45,7 +46,8 @@ const EMOTES = new Map([
   ["amazing", "真棒"],
   ["hello", "你好"],
   ["oops", "抱歉"],
-  ["wow", "哇哦"]
+  ["wow", "哇哦"],
+  ["bluff", "这是诈唬吧"]
 ]);
 const SERVER_STARTED_AT = Date.now();
 const LOBBY_MUSIC = {
@@ -67,7 +69,6 @@ const DEALER_BLESSINGS = [
   "谢谢老板，祝你顺风顺水"
 ];
 
-const sessions = new Map();
 const feedbackChallenges = new Map();
 const feedbackCooldowns = new Map();
 const rooms = new Map();
@@ -119,6 +120,15 @@ function initDatabase() {
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_email_codes_email ON email_codes(email, created_at);
+    CREATE TABLE IF NOT EXISTS sessions (
+      token_hash TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      last_seen_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
     CREATE TABLE IF NOT EXISTS feedback (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -131,16 +141,103 @@ function initDatabase() {
     );
     CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at);
     CREATE INDEX IF NOT EXISTS idx_feedback_user_id ON feedback(user_id, created_at);
+    CREATE TABLE IF NOT EXISTS dealer_tips (
+      id TEXT PRIMARY KEY,
+      room_id TEXT NOT NULL,
+      room_name TEXT NOT NULL,
+      hand_number INTEGER NOT NULL,
+      user_id TEXT NOT NULL,
+      username TEXT NOT NULL,
+      amount INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_dealer_tips_room_id ON dealer_tips(room_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_dealer_tips_user_id ON dealer_tips(user_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_dealer_tips_created_at ON dealer_tips(created_at);
+    CREATE TABLE IF NOT EXISTS room_records (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      owner_username TEXT NOT NULL,
+      small_blind INTEGER NOT NULL,
+      big_blind INTEGER NOT NULL,
+      starting_chips INTEGER NOT NULL,
+      hand_count INTEGER NOT NULL DEFAULT 0,
+      dealer_tips INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      last_seen_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_room_records_created_at ON room_records(created_at);
+    CREATE TABLE IF NOT EXISTS room_participants (
+      room_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      username TEXT NOT NULL,
+      email TEXT NOT NULL,
+      buy_in_chips INTEGER NOT NULL,
+      final_chips INTEGER NOT NULL,
+      dealer_tips INTEGER NOT NULL DEFAULT 0,
+      net_chips INTEGER NOT NULL,
+      hands_played INTEGER NOT NULL DEFAULT 0,
+      seated INTEGER NOT NULL DEFAULT 1,
+      joined_at INTEGER NOT NULL,
+      last_seen_at INTEGER NOT NULL,
+      PRIMARY KEY (room_id, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_room_participants_user_id ON room_participants(user_id, last_seen_at);
+    CREATE TABLE IF NOT EXISTS room_hands (
+      room_id TEXT NOT NULL,
+      hand_number INTEGER NOT NULL,
+      button_seat INTEGER NOT NULL,
+      small_blind INTEGER NOT NULL,
+      big_blind INTEGER NOT NULL,
+      started_at INTEGER NOT NULL,
+      ended_at INTEGER,
+      duration_ms INTEGER,
+      max_pot INTEGER NOT NULL DEFAULT 0,
+      board_json TEXT NOT NULL DEFAULT '[]',
+      winners_json TEXT NOT NULL DEFAULT '[]',
+      deck_commit TEXT NOT NULL DEFAULT '',
+      fair_seed TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'running',
+      PRIMARY KEY (room_id, hand_number)
+    );
+    CREATE INDEX IF NOT EXISTS idx_room_hands_started_at ON room_hands(started_at);
+    CREATE TABLE IF NOT EXISTS room_actions (
+      id TEXT PRIMARY KEY,
+      room_id TEXT NOT NULL,
+      hand_number INTEGER NOT NULL,
+      action_index INTEGER NOT NULL,
+      street TEXT NOT NULL,
+      user_id TEXT,
+      username TEXT,
+      seat INTEGER,
+      action_type TEXT NOT NULL,
+      amount INTEGER NOT NULL DEFAULT 0,
+      pot_before INTEGER NOT NULL DEFAULT 0,
+      pot_after INTEGER NOT NULL DEFAULT 0,
+      current_bet_before INTEGER NOT NULL DEFAULT 0,
+      current_bet_after INTEGER NOT NULL DEFAULT 0,
+      stack_before INTEGER,
+      stack_after INTEGER,
+      bet_before INTEGER,
+      bet_after INTEGER,
+      board_json TEXT NOT NULL DEFAULT '[]',
+      payload_json TEXT NOT NULL DEFAULT '{}',
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_room_actions_room_hand ON room_actions(room_id, hand_number, action_index);
+    CREATE INDEX IF NOT EXISTS idx_room_actions_user_id ON room_actions(user_id, created_at);
   `);
   return database;
 }
 
-function json(res, status, payload) {
+function json(res, status, payload, extraHeaders = {}) {
   const body = JSON.stringify(payload);
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "content-length": Buffer.byteLength(body),
-    "cache-control": "no-store"
+    "cache-control": "no-store",
+    ...extraHeaders
   });
   res.end(body);
 }
@@ -183,6 +280,71 @@ function createToken() {
   return crypto.randomBytes(32).toString("base64url");
 }
 
+function parseCookies(req) {
+  const header = String(req.headers.cookie || "");
+  const cookies = {};
+  for (const part of header.split(";")) {
+    const index = part.indexOf("=");
+    if (index === -1) continue;
+    const key = part.slice(0, index).trim();
+    const value = part.slice(index + 1).trim();
+    if (key) cookies[key] = decodeURIComponent(value);
+  }
+  return cookies;
+}
+
+function authTokenFromRequest(req) {
+  const header = req.headers.authorization || "";
+  if (header.startsWith("Bearer ")) return header.slice(7);
+  return parseCookies(req).pokerToken || "";
+}
+
+function sessionCookie(token) {
+  const maxAge = Math.floor(SESSION_TTL_MS / 1000);
+  return `pokerToken=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+}
+
+function clearSessionCookie() {
+  return "pokerToken=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
+}
+
+function sessionHash(token) {
+  return crypto.createHash("sha256").update(String(token || "")).digest("hex");
+}
+
+function createSession(userId) {
+  cleanupExpiredSessions();
+  const token = createToken();
+  const now = Date.now();
+  db.prepare(`
+    INSERT INTO sessions (token_hash, user_id, expires_at, created_at, last_seen_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(sessionHash(token), userId, now + SESSION_TTL_MS, now, now);
+  return token;
+}
+
+function getSessionUserId(token) {
+  if (!token) return null;
+  const now = Date.now();
+  const record = db.prepare("SELECT user_id, expires_at FROM sessions WHERE token_hash = ?").get(sessionHash(token));
+  if (!record) return null;
+  if (record.expires_at < now) {
+    db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(sessionHash(token));
+    return null;
+  }
+  db.prepare("UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?").run(now, sessionHash(token));
+  return record.user_id;
+}
+
+function deleteSession(token) {
+  if (!token) return;
+  db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(sessionHash(token));
+}
+
+function cleanupExpiredSessions() {
+  db.prepare("DELETE FROM sessions WHERE expires_at < ?").run(Date.now());
+}
+
 function publicUser(user) {
   return { id: user.id, username: user.username, email: user.email || "" };
 }
@@ -205,7 +367,7 @@ function insertUser({ id = crypto.randomUUID(), email, username, passwordSalt = 
   return getUserById(id);
 }
 
-function upsertCodeLoginUser(email) {
+function upsertCodeLoginUser(email, username = "") {
   const existing = getUserByEmail(email);
   if (existing) {
     if (!existing.verified_at) {
@@ -215,7 +377,7 @@ function upsertCodeLoginUser(email) {
   }
   return insertUser({
     email,
-    username: uniqueEmailName(email),
+    username: normalizeUsername(username) || uniqueEmailName(email),
     verifiedAt: Date.now()
   });
 }
@@ -232,9 +394,8 @@ function uniqueEmailName(email) {
 }
 
 function requireUser(req) {
-  const header = req.headers.authorization || "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-  const userId = sessions.get(token);
+  const token = authTokenFromRequest(req);
+  const userId = getSessionUserId(token);
   const user = getUserById(userId);
   return user?.verified_at ? user : null;
 }
@@ -292,6 +453,316 @@ function insertFeedback({ user, text, req }) {
   );
 }
 
+function recordDealerTip(room, player, amount) {
+  if (isTestRoom(room)) return;
+  db.prepare(`
+    INSERT INTO dealer_tips (id, room_id, room_name, hand_number, user_id, username, amount, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    crypto.randomUUID(),
+    room.id,
+    room.name,
+    room.game.handNumber || 0,
+    player.userId,
+    player.username,
+    amount,
+    Date.now()
+  );
+}
+
+function recordRoomCreated(room, owner) {
+  if (isTestRoom(room) || isTestUser(owner)) return;
+  db.prepare(`
+    INSERT OR IGNORE INTO room_records (
+      id, name, owner_id, owner_username, small_blind, big_blind, starting_chips,
+      hand_count, dealer_tips, created_at, last_seen_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
+  `).run(
+    room.id,
+    room.name,
+    owner.id,
+    owner.username,
+    room.settings.smallBlind,
+    room.settings.bigBlind,
+    room.settings.startingChips,
+    room.createdAt,
+    Date.now()
+  );
+}
+
+function recordRoomSeat(room, user, player) {
+  if (isTestRoom(room) || isTestUser(user)) return;
+  const now = Date.now();
+  const existing = db.prepare("SELECT seated, buy_in_chips, dealer_tips FROM room_participants WHERE room_id = ? AND user_id = ?").get(room.id, user.id);
+  if (!existing) {
+    db.prepare(`
+      INSERT INTO room_participants (
+        room_id, user_id, username, email, buy_in_chips, final_chips, dealer_tips,
+        net_chips, hands_played, seated, joined_at, last_seen_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, 0, ?, 0, 1, ?, ?)
+    `).run(
+      room.id,
+      user.id,
+      user.username,
+      user.email || "",
+      room.settings.startingChips,
+      player.chips + (player.bet || 0),
+      player.chips + (player.bet || 0) - room.settings.startingChips,
+      now,
+      now
+    );
+    syncRoomAccounting(room);
+    return;
+  }
+  const buyIn = existing.buy_in_chips + (existing.seated ? 0 : room.settings.startingChips);
+  const finalChips = player.chips + (player.bet || 0);
+  db.prepare(`
+    UPDATE room_participants
+    SET username = ?, email = ?, buy_in_chips = ?, final_chips = ?, net_chips = ?,
+        seated = 1, last_seen_at = ?
+    WHERE room_id = ? AND user_id = ?
+  `).run(user.username, user.email || "", buyIn, finalChips, finalChips - buyIn, now, room.id, user.id);
+  syncRoomAccounting(room);
+}
+
+function markRoomParticipantLeft(room, player) {
+  if (isTestRoom(room)) return;
+  syncRoomAccounting(room);
+  db.prepare("UPDATE room_participants SET seated = 0, last_seen_at = ? WHERE room_id = ? AND user_id = ?")
+    .run(Date.now(), room.id, player.userId);
+}
+
+function recordParticipantTip(room, player, amount) {
+  if (isTestRoom(room)) return;
+  const row = db.prepare("SELECT buy_in_chips, dealer_tips FROM room_participants WHERE room_id = ? AND user_id = ?").get(room.id, player.userId);
+  if (!row) return;
+  const finalChips = player.chips + (player.bet || 0);
+  const dealerTips = (row.dealer_tips || 0) + amount;
+  db.prepare(`
+    UPDATE room_participants
+    SET username = ?, final_chips = ?, dealer_tips = ?, net_chips = ?, last_seen_at = ?
+    WHERE room_id = ? AND user_id = ?
+  `).run(player.username, finalChips, dealerTips, finalChips - row.buy_in_chips, Date.now(), room.id, player.userId);
+}
+
+function nextActionIndex(room) {
+  room.actionIndex = (room.actionIndex || 0) + 1;
+  return room.actionIndex;
+}
+
+function recordHandStart(room) {
+  if (isTestRoom(room)) return;
+  const game = room.game;
+  room.actionIndex = 0;
+  room.handStartedAt = Date.now();
+  db.prepare(`
+    INSERT OR REPLACE INTO room_hands (
+      room_id, hand_number, button_seat, small_blind, big_blind, started_at,
+      max_pot, board_json, winners_json, deck_commit, fair_seed, status
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, '', 'running')
+  `).run(
+    room.id,
+    game.handNumber,
+    game.button,
+    room.settings.smallBlind,
+    room.settings.bigBlind,
+    room.handStartedAt,
+    game.pot || 0,
+    JSON.stringify(game.board || []),
+    game.deckCommit || ""
+  );
+  recordRoomAction(room, {
+    actionType: "hand_start",
+    amount: 0,
+    payload: {
+      seats: room.seats.map((player, seat) => player ? {
+        seat,
+        userId: player.userId,
+        username: player.username,
+        chips: player.chips,
+        committed: player.committed || 0,
+        inHand: Boolean(player.inHand)
+      } : null),
+      deckCommit: game.deckCommit
+    }
+  });
+}
+
+function recordRoomAction(room, details = {}) {
+  if (isTestRoom(room)) return;
+  const game = room.game;
+  if (!game.handNumber) return;
+  const player = Number.isInteger(details.seat) ? room.seats[details.seat] : null;
+  db.prepare(`
+    INSERT INTO room_actions (
+      id, room_id, hand_number, action_index, street, user_id, username, seat,
+      action_type, amount, pot_before, pot_after, current_bet_before, current_bet_after,
+      stack_before, stack_after, bet_before, bet_after, board_json, payload_json, created_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    crypto.randomUUID(),
+    room.id,
+    game.handNumber,
+    nextActionIndex(room),
+    game.status || "waiting",
+    details.userId || player?.userId || null,
+    details.username || player?.username || null,
+    Number.isInteger(details.seat) ? details.seat : null,
+    details.actionType || "event",
+    Math.floor(Number(details.amount || 0)),
+    Math.floor(Number(details.potBefore ?? game.pot ?? 0)),
+    Math.floor(Number(details.potAfter ?? game.pot ?? 0)),
+    Math.floor(Number(details.currentBetBefore ?? game.currentBet ?? 0)),
+    Math.floor(Number(details.currentBetAfter ?? game.currentBet ?? 0)),
+    details.stackBefore ?? null,
+    details.stackAfter ?? player?.chips ?? null,
+    details.betBefore ?? null,
+    details.betAfter ?? player?.bet ?? null,
+    JSON.stringify(game.board || []),
+    JSON.stringify(details.payload || {}),
+    Date.now()
+  );
+}
+
+function recordHandEnd(room) {
+  if (isTestRoom(room)) return;
+  const game = room.game;
+  const startedAt = room.handStartedAt || db.prepare("SELECT started_at FROM room_hands WHERE room_id = ? AND hand_number = ?").get(room.id, game.handNumber)?.started_at || Date.now();
+  const endedAt = Date.now();
+  db.prepare(`
+    UPDATE room_hands
+    SET ended_at = ?, duration_ms = ?, max_pot = MAX(max_pot, ?), board_json = ?,
+        winners_json = ?, fair_seed = ?, status = 'showdown'
+    WHERE room_id = ? AND hand_number = ?
+  `).run(
+    endedAt,
+    Math.max(0, endedAt - startedAt),
+    (game.winners || []).reduce((sum, winner) => sum + Number(winner.amount || 0), 0),
+    JSON.stringify(game.board || []),
+    JSON.stringify(game.winners || []),
+    game.fairSeed || "",
+    room.id,
+    game.handNumber
+  );
+  recordRoomAction(room, {
+    actionType: "hand_end",
+    amount: (game.winners || []).reduce((sum, winner) => sum + Number(winner.amount || 0), 0),
+    payload: { winners: game.winners || [], board: game.board || [], fairSeed: game.fairSeed || "" }
+  });
+}
+
+function syncRoomAccounting(room) {
+  if (isTestRoom(room)) return;
+  const now = Date.now();
+  db.prepare("UPDATE room_records SET name = ?, hand_count = ?, dealer_tips = ?, last_seen_at = ? WHERE id = ?")
+    .run(room.name, room.game.handNumber || 0, room.dealerTips || 0, now, room.id);
+  for (const player of occupiedSeats(room)) {
+    const row = db.prepare("SELECT buy_in_chips FROM room_participants WHERE room_id = ? AND user_id = ?").get(room.id, player.userId);
+    if (!row) continue;
+    const finalChips = player.chips + (player.bet || 0);
+    db.prepare(`
+      UPDATE room_participants
+      SET username = ?, final_chips = ?, net_chips = ?, hands_played = ?, seated = 1, last_seen_at = ?
+      WHERE room_id = ? AND user_id = ?
+    `).run(player.username, finalChips, finalChips - row.buy_in_chips, room.game.handNumber || 0, now, room.id, player.userId);
+  }
+}
+
+function roomHistory(roomId) {
+  const record = db.prepare("SELECT * FROM room_records WHERE id = ?").get(String(roomId || "").toUpperCase());
+  if (!record) return null;
+  const participants = db.prepare(`
+    SELECT user_id, username, email, buy_in_chips, final_chips, dealer_tips, net_chips, hands_played, seated, joined_at, last_seen_at
+    FROM room_participants
+    WHERE room_id = ?
+    ORDER BY joined_at ASC
+  `).all(record.id);
+  const tips = db.prepare(`
+    SELECT user_id, username, amount, hand_number, created_at
+    FROM dealer_tips
+    WHERE room_id = ?
+    ORDER BY created_at DESC
+    LIMIT 50
+  `).all(record.id);
+  const hands = db.prepare(`
+    SELECT room_id, hand_number, button_seat, small_blind, big_blind, started_at, ended_at,
+           duration_ms, max_pot, board_json, winners_json, deck_commit, status
+    FROM room_hands
+    WHERE room_id = ?
+    ORDER BY hand_number DESC
+    LIMIT 50
+  `).all(record.id);
+  return { room: record, participants, dealerTips: tips, hands, stats: roomStats(record.id) };
+}
+
+function roomStats(roomId) {
+  const highestStack = db.prepare(`
+    SELECT username, final_chips AS value FROM room_participants
+    WHERE room_id = ?
+    ORDER BY final_chips DESC
+    LIMIT 1
+  `).get(roomId) || null;
+  const biggestWin = db.prepare(`
+    SELECT username, net_chips AS value FROM room_participants
+    WHERE room_id = ?
+    ORDER BY net_chips DESC
+    LIMIT 1
+  `).get(roomId) || null;
+  const biggestLoss = db.prepare(`
+    SELECT username, net_chips AS value FROM room_participants
+    WHERE room_id = ?
+    ORDER BY net_chips ASC
+    LIMIT 1
+  `).get(roomId) || null;
+  const biggestPot = db.prepare(`
+    SELECT hand_number, max_pot AS value FROM room_hands
+    WHERE room_id = ?
+    ORDER BY max_pot DESC
+    LIMIT 1
+  `).get(roomId) || null;
+  const longestHand = db.prepare(`
+    SELECT hand_number, duration_ms AS value FROM room_hands
+    WHERE room_id = ? AND duration_ms IS NOT NULL
+    ORDER BY duration_ms DESC
+    LIMIT 1
+  `).get(roomId) || null;
+  const mostTips = db.prepare(`
+    SELECT username, dealer_tips AS value FROM room_participants
+    WHERE room_id = ?
+    ORDER BY dealer_tips DESC
+    LIMIT 1
+  `).get(roomId) || null;
+  const handCount = db.prepare("SELECT COUNT(*) AS value FROM room_hands WHERE room_id = ?").get(roomId)?.value || 0;
+  const actionCount = db.prepare("SELECT COUNT(*) AS value FROM room_actions WHERE room_id = ?").get(roomId)?.value || 0;
+  return { highestStack, biggestWin, biggestLoss, biggestPot, longestHand, mostTips, handCount, actionCount };
+}
+
+function updateUserDisplayName(userId, username) {
+  db.prepare("UPDATE users SET username = ? WHERE id = ?").run(username, userId);
+  for (const client of clients) {
+    if (client.user.id === userId) client.user.username = username;
+  }
+  for (const room of rooms.values()) {
+    let changed = false;
+    for (const player of room.seats) {
+      if (player?.userId === userId) {
+        player.username = username;
+        changed = true;
+      }
+    }
+    if (changed) {
+      syncRoomAccounting(room);
+      broadcastRoom(room);
+    }
+  }
+  broadcastLobby();
+  return getUserById(userId);
+}
+
 async function handleApi(req, res, url) {
   try {
     if (req.method === "GET" && url.pathname === "/api/version") {
@@ -347,9 +818,8 @@ async function handleApi(req, res, url) {
       if (!user.verified_at) {
         return json(res, 403, { error: "邮箱未验证，请先获取验证码并完成验证码登录" });
       }
-      const token = createToken();
-      sessions.set(token, user.id);
-      return json(res, 200, { token, user: publicUser(user) });
+      const token = createSession(user.id);
+      return json(res, 200, { token, user: publicUser(user) }, { "set-cookie": sessionCookie(token) });
     }
 
     if (req.method === "POST" && url.pathname === "/api/email-code/request") {
@@ -366,17 +836,25 @@ async function handleApi(req, res, url) {
       const body = await readBody(req);
       const email = normalizeEmail(body.email);
       const code = String(body.code || "").trim();
+      const username = normalizeUsername(body.username);
       if (!isValidEmail(email) || !/^\d{6}$/.test(code)) {
         return json(res, 400, { error: "邮箱或验证码格式不正确" });
+      }
+      if (username && !/^[\w\u4e00-\u9fa5 -]{2,20}$/.test(username)) {
+        return json(res, 400, { error: "昵称需要 2-20 个字符" });
       }
       const verification = verifyEmailCode(email, code);
       if (!verification.ok) {
         return json(res, 400, { error: verification.error });
       }
-      const user = upsertCodeLoginUser(email);
-      const token = createToken();
-      sessions.set(token, user.id);
-      return json(res, 200, { token, user: publicUser(user) });
+      const user = upsertCodeLoginUser(email, username);
+      const token = createSession(user.id);
+      return json(res, 200, { token, user: publicUser(user) }, { "set-cookie": sessionCookie(token) });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/logout") {
+      deleteSession(authTokenFromRequest(req));
+      return json(res, 200, { ok: true }, { "set-cookie": clearSessionCookie() });
     }
 
     const user = requireUser(req);
@@ -388,12 +866,69 @@ async function handleApi(req, res, url) {
       return json(res, 200, { user: publicUser(user) });
     }
 
+    if (req.method === "PATCH" && url.pathname === "/api/me") {
+      const body = await readBody(req);
+      const username = normalizeUsername(body.username);
+      if (!/^[\w\u4e00-\u9fa5 -]{2,20}$/.test(username)) {
+        return json(res, 400, { error: "昵称需要 2-20 个字符" });
+      }
+      const updated = updateUserDisplayName(user.id, username);
+      return json(res, 200, { user: publicUser(updated) });
+    }
+
     if (req.method === "GET" && url.pathname === "/api/avatars") {
       return json(res, 200, { avatars: listAvatars() });
     }
 
     if (req.method === "GET" && url.pathname === "/api/rooms") {
       return json(res, 200, { rooms: [...rooms.values()].map(publicRoom) });
+    }
+
+    if (req.method === "GET" && url.pathname.startsWith("/api/rooms/")) {
+      const roomId = decodeURIComponent(url.pathname.slice("/api/rooms/".length)).trim().toUpperCase();
+      const room = rooms.get(roomId);
+      if (!room) return json(res, 404, { error: "房间不存在或当前不在线" });
+      return json(res, 200, { room: publicRoom(room) });
+    }
+
+    if (req.method === "GET" && url.pathname.startsWith("/api/history/rooms/")) {
+      const roomId = decodeURIComponent(url.pathname.slice("/api/history/rooms/".length)).trim().toUpperCase();
+      const history = roomHistory(roomId);
+      if (!history) return json(res, 404, { error: "没有找到这个房间记录" });
+      return json(res, 200, history);
+    }
+
+    if (req.method === "GET" && url.pathname.startsWith("/api/records/rooms/")) {
+      const roomId = decodeURIComponent(url.pathname.slice("/api/records/rooms/".length)).trim().toUpperCase();
+      const history = roomHistory(roomId);
+      if (!history) return json(res, 404, { error: "没有找到这个房间记录" });
+      const actionLimit = clampInt(url.searchParams.get("actions"), 200, 1, 1000);
+      const handLimit = clampInt(url.searchParams.get("hands"), 50, 1, 200);
+      const hands = db.prepare(`
+        SELECT * FROM room_hands WHERE room_id = ? ORDER BY hand_number DESC LIMIT ?
+      `).all(roomId, handLimit);
+      const actions = db.prepare(`
+        SELECT * FROM room_actions WHERE room_id = ? ORDER BY hand_number DESC, action_index DESC LIMIT ?
+      `).all(roomId, actionLimit);
+      return json(res, 200, { ...history, hands, actions });
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/history/rooms") {
+      const query = String(url.searchParams.get("q") || "").trim().toUpperCase();
+      const limit = clampInt(url.searchParams.get("limit"), 20, 1, 100);
+      const records = query
+        ? db.prepare("SELECT * FROM room_records WHERE id = ? OR name LIKE ? ORDER BY created_at DESC LIMIT ?").all(query, `%${query}%`, limit)
+        : db.prepare("SELECT * FROM room_records ORDER BY created_at DESC LIMIT ?").all(limit);
+      return json(res, 200, { rooms: records });
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/history/dealer-tips") {
+      const roomId = String(url.searchParams.get("roomId") || "").trim().toUpperCase();
+      const limit = clampInt(url.searchParams.get("limit"), 50, 1, 200);
+      const tips = roomId
+        ? db.prepare("SELECT * FROM dealer_tips WHERE room_id = ? ORDER BY created_at DESC LIMIT ?").all(roomId, limit)
+        : db.prepare("SELECT * FROM dealer_tips ORDER BY created_at DESC LIMIT ?").all(limit);
+      return json(res, 200, { tips });
     }
 
     if (req.method === "GET" && url.pathname === "/api/feedback/challenge") {
@@ -426,6 +961,7 @@ async function handleApi(req, res, url) {
       const settings = normalizeRoomSettings(body);
       const room = createRoom(name || `${user.username} 的牌桌`, user, settings);
       rooms.set(room.id, room);
+      recordRoomCreated(room, user);
       broadcastLobby();
       return json(res, 201, { room: publicRoom(room) });
     }
@@ -760,6 +1296,18 @@ function clampInt(value, fallback, min, max) {
   return Math.max(min, Math.min(max, parsed));
 }
 
+function isTestUser(user) {
+  return String(user?.email || "").toLowerCase().endsWith("@example.test");
+}
+
+function isTestRoomName(name) {
+  return /^(回归测试|短全下测试|加注测试|cookie|profile)/.test(String(name || ""));
+}
+
+function isTestRoom(room) {
+  return Boolean(room?.testMode) || isTestRoomName(room?.name);
+}
+
 function createRoom(name, owner, settings = {}) {
   const smallBlind = settings.smallBlind || SMALL_BLIND;
   const bigBlind = settings.bigBlind || BIG_BLIND;
@@ -769,6 +1317,7 @@ function createRoom(name, owner, settings = {}) {
     name,
     ownerId: owner.id,
     createdAt: Date.now(),
+    testMode: isTestUser(owner) || isTestRoomName(name),
     settings: { smallBlind, bigBlind, startingChips },
     dealerTips: 0,
     turnTimer: null,
@@ -1009,6 +1558,12 @@ function handleTurnTimeout(roomId, handNumber, actingSeat, deadline) {
     game.lastAction = `${player.username} 超时过牌`;
   }
   game.acted = [...new Set([...game.acted, player.userId])];
+  recordRoomAction(room, {
+    seat: actingSeat,
+    actionType: callAmount > 0 ? "timeout_fold" : "timeout_check",
+    amount: 0,
+    payload: { callAmount, lastAction: game.lastAction }
+  });
   autoAdvanceIfNeeded(room);
   processAutomaticTurns(room);
   scheduleTurnTimer(room);
@@ -1075,6 +1630,25 @@ function startHand(room) {
 
   game.actingSeat = nextSeat(room, bigBlindSeat, canAct);
   game.lastAction = `第 ${game.handNumber} 手牌开始`;
+  recordHandStart(room);
+  recordRoomAction(room, {
+    seat: smallBlindSeat,
+    actionType: "small_blind",
+    amount: smallBlindPaid,
+    potAfter: game.pot,
+    currentBetAfter: game.currentBet,
+    stackAfter: room.seats[smallBlindSeat].chips,
+    betAfter: room.seats[smallBlindSeat].bet
+  });
+  recordRoomAction(room, {
+    seat: bigBlindSeat,
+    actionType: "big_blind",
+    amount: bigBlindPaid,
+    potAfter: game.pot,
+    currentBetAfter: game.currentBet,
+    stackAfter: room.seats[bigBlindSeat].chips,
+    betAfter: room.seats[bigBlindSeat].bet
+  });
   autoAdvanceIfNeeded(room);
   processAutomaticTurns(room);
   scheduleTurnTimer(room);
@@ -1136,6 +1710,13 @@ function applyPlayerAction(room, seatIndex, action, amount, prefix = "") {
   }
   const callAmount = Math.max(0, game.currentBet - player.bet);
   const name = prefix ? `${player.username} ${prefix}` : player.username;
+  const before = {
+    pot: game.pot,
+    currentBet: game.currentBet,
+    stack: player.chips,
+    bet: player.bet
+  };
+  let paidAmount = 0;
   player.pendingAction = null;
 
   if (action === "fold") {
@@ -1150,6 +1731,7 @@ function applyPlayerAction(room, seatIndex, action, amount, prefix = "") {
     game.lastAction = `${name} 过牌`;
   } else if (action === "call") {
     const paid = takeChips(room, seatIndex, callAmount);
+    paidAmount = paid;
     addChipAnimation(room, seatIndex, paid, "跟注");
     game.acted.push(player.userId);
     game.lastAction = `${name} 跟注 ${paid}`;
@@ -1169,6 +1751,7 @@ function applyPlayerAction(room, seatIndex, action, amount, prefix = "") {
       throw new Error(`下注至少 ${room.settings.bigBlind}`);
     }
     const paid = takeChips(room, seatIndex, targetTotal);
+    paidAmount = paid;
     addChipAnimation(room, seatIndex, paid, "下注");
     game.currentBet = player.bet;
     if (isFullBet) {
@@ -1198,6 +1781,7 @@ function applyPlayerAction(room, seatIndex, action, amount, prefix = "") {
     const previousBet = game.currentBet;
     const previousFullBet = game.fullBet;
     const paid = takeChips(room, seatIndex, targetTotal - player.bet);
+    paidAmount = paid;
     addChipAnimation(room, seatIndex, paid, "加注");
     if (player.bet > game.currentBet) {
       game.currentBet = player.bet;
@@ -1219,6 +1803,20 @@ function applyPlayerAction(room, seatIndex, action, amount, prefix = "") {
   }
 
   game.acted = [...new Set(game.acted)];
+  recordRoomAction(room, {
+    seat: seatIndex,
+    actionType: action,
+    amount: paidAmount,
+    potBefore: before.pot,
+    potAfter: game.pot,
+    currentBetBefore: before.currentBet,
+    currentBetAfter: game.currentBet,
+    stackBefore: before.stack,
+    stackAfter: player.chips,
+    betBefore: before.bet,
+    betAfter: player.bet,
+    payload: { requestedAmount: amount ?? null, lastAction: game.lastAction, prefix }
+  });
   autoAdvanceIfNeeded(room);
 }
 
@@ -1366,6 +1964,7 @@ function advanceStreet(room) {
     showdown(room);
     return;
   }
+  recordRoomAction(room, { actionType: `deal_${game.status}`, payload: { board: game.board } });
 
   const needAction = playersNeedingAction(room);
   if (needAction.length <= 1) {
@@ -1401,6 +2000,7 @@ function awardSingleWinner(room, player) {
   game.status = "showdown";
   revealFairProof(room);
   game.lastAction = `${player.username} 赢得本手`;
+  recordHandEnd(room);
   autoReadyNextHand(room);
   scheduleNextHand(room);
 }
@@ -1456,6 +2056,7 @@ function showdown(room) {
   game.status = "showdown";
   revealFairProof(room);
   game.lastAction = "摊牌结算";
+  recordHandEnd(room);
   autoReadyNextHand(room);
   scheduleNextHand(room);
 }
@@ -1663,6 +2264,7 @@ function broadcastLobby() {
 }
 
 function broadcastRoom(room) {
+  syncRoomAccounting(room);
   for (const client of clients) {
     if (client.roomId === room.id) {
       sendJson(client, { type: "roomState", ...roomStateFor(room, client.user.id) });
@@ -1781,6 +2383,7 @@ function handleWsMessage(client, message) {
       pendingAction: null,
       result: ""
     };
+    recordRoomSeat(room, client.user, room.seats[index]);
     room.game.lastAction = `${client.user.username} 入座`;
     if (room.game.status === "showdown") scheduleNextHand(room);
     broadcastRoom(room);
@@ -1791,6 +2394,7 @@ function handleWsMessage(client, message) {
       throw new Error("已准备后不能直接起身，请先取消准备");
     }
     if (index >= 0 && !isHandInProgress(room)) {
+      markRoomParticipantLeft(room, player);
       room.seats[index] = null;
       room.game.lastAction = `${client.user.username} 离座`;
       if (room.game.status === "showdown") scheduleNextHand(room);
@@ -1862,6 +2466,8 @@ function handleWsMessage(client, message) {
     if (amount > player.chips) throw new Error("筹码不足");
     player.chips -= amount;
     room.dealerTips = (room.dealerTips || 0) + amount;
+    recordDealerTip(room, player, amount);
+    recordParticipantTip(room, player, amount);
     room.game.lastAction = `${client.user.username} 打赏荷官 ${amount}`;
     broadcastRoom(room);
     broadcastInteraction(room, {
@@ -1921,8 +2527,8 @@ const server = http.createServer((req, res) => {
 
 server.on("upgrade", (req, socket) => {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
-  const token = url.searchParams.get("token") || "";
-  const userId = sessions.get(token);
+  const token = url.searchParams.get("token") || authTokenFromRequest(req);
+  const userId = getSessionUserId(token);
   const user = getUserById(userId);
   if (url.pathname !== "/ws" || !user?.verified_at) {
     socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");

@@ -81,7 +81,7 @@ p {
 }
 
 .shell {
-  width: min(1180px, calc(100vw - 24px));
+  width: min(1360px, calc(100vw - 24px));
   margin: 0 auto;
   padding: 24px 0;
 }
@@ -289,6 +289,21 @@ p {
   gap: 14px;
 }
 
+.profileBox {
+  display: grid;
+  gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.profileBox h2 {
+  font-size: 18px;
+}
+
+.profileBox .hint {
+  word-break: break-all;
+}
+
 .drinkSupport {
   display: grid;
   gap: 12px;
@@ -363,8 +378,72 @@ p {
   color: #dffff2;
 }
 
+.roomLookup,
+.lookupCard {
+  display: grid;
+  gap: 10px;
+}
+
+.lookupCard {
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 8px;
+  background: rgb(12 20 26 / 72%);
+}
+
+.lookupHead {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.ledgerSummary,
+.ledgerRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  align-items: center;
+}
+
+.ledgerSummary {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ledgerRows {
+  display: grid;
+  gap: 6px;
+}
+
+.ledgerRow {
+  padding: 8px;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 5%);
+  font-size: 13px;
+}
+
+.gain {
+  color: #72e6a6;
+}
+
+.loss {
+  color: #ff9fa6;
+}
+
 .tableHead {
   margin-bottom: 16px;
+}
+
+.roomIdPill {
+  width: auto;
+  min-height: 30px;
+  margin-top: 8px;
+  padding: 0 10px;
+  border: 1px solid rgb(255 255 255 / 16%);
+  background: rgb(255 255 255 / 7%);
+  color: #dffff2;
+  font-size: 13px;
 }
 
 #roomView {
@@ -375,7 +454,7 @@ p {
 
 .tableSurface {
   position: relative;
-  min-height: 620px;
+  min-height: 680px;
   border: 14px solid #1d3d3a;
   border-radius: 48% / 44%;
   padding: 24px;
@@ -449,9 +528,9 @@ p {
 .boardLine {
   position: absolute;
   left: 50%;
-  top: 48%;
-  width: min(540px, 58vw);
-  min-height: 190px;
+  top: 46%;
+  width: min(640px, 62vw);
+  min-height: 210px;
   transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
@@ -482,16 +561,26 @@ p {
 .card {
   display: grid;
   place-items: center;
-  width: 58px;
+  grid-template-rows: 1fr auto;
+  width: 66px;
   aspect-ratio: 0.72;
   border-radius: 8px;
   border: 1px solid #d8e0dd;
   background:
     linear-gradient(150deg, #ffffff, #e8f1ef);
   color: #101010;
-  font-size: 18px;
+  line-height: 1;
   font-weight: 900;
   box-shadow: 0 8px 18px rgb(0 0 0 / 30%);
+}
+
+.cardRank {
+  font-size: 24px;
+}
+
+.cardSuit {
+  margin-top: -2px;
+  font-size: 22px;
 }
 
 .card.red {
@@ -509,7 +598,7 @@ p {
 .tableStartBtn {
   position: absolute;
   left: 50%;
-  top: calc(48% + 120px);
+  top: calc(46% + 132px);
   z-index: 12;
   min-width: 170px;
   transform: translateX(-50%);
@@ -659,32 +748,45 @@ p {
 .settlementPanel {
   position: absolute;
   left: 50%;
-  bottom: 22%;
+  top: 58%;
   z-index: 17;
-  width: min(360px, 72vw);
+  width: min(430px, 74vw);
   transform: translateX(-50%);
   border: 1px solid rgb(215 184 90 / 40%);
   border-radius: 10px;
   background: rgb(10 24 28 / 86%);
-  padding: 12px;
+  padding: 14px;
   box-shadow: 0 18px 42px rgb(0 0 0 / 35%);
+}
+
+.settlementPanel.settlementTier3,
+.settlementPanel.settlementTier4,
+.settlementPanel.settlementTier5 {
+  border-color: rgb(255 224 138 / 74%);
+  background:
+    radial-gradient(circle at 50% 0, rgb(255 224 138 / 20%), transparent 62%),
+    rgb(10 24 28 / 92%);
+  box-shadow:
+    0 0 0 1px rgb(255 224 138 / 18%),
+    0 22px 58px rgb(0 0 0 / 46%),
+    0 0 42px rgb(215 184 90 / 18%);
 }
 
 .settlementTitle {
   margin-bottom: 8px;
   color: #ffe08a;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 900;
 }
 
 .settlementRow {
   display: grid;
-  grid-template-columns: 64px 1fr auto;
+  grid-template-columns: 72px 1fr auto;
   gap: 8px;
   align-items: center;
   padding: 6px 0;
   border-top: 1px solid rgb(255 255 255 / 10%);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .settlementRow strong {
@@ -709,14 +811,14 @@ p {
 .celebrationOverlay::before {
   content: "";
   position: absolute;
-  width: min(520px, 72vw);
+  width: min(calc(520px * var(--celebration-scale, 1)), 86vw);
   aspect-ratio: 1;
   border-radius: 50%;
   opacity: 0;
   background:
     radial-gradient(circle, rgb(255 240 170 / 30%), transparent 62%),
     conic-gradient(from 90deg, rgb(53 196 134 / 0), rgb(215 184 90 / 55%), rgb(222 89 98 / 36%), rgb(53 196 134 / 0));
-  animation: celebrationAura 1.55s ease-out forwards;
+  animation: celebrationAura 1.75s ease-out forwards;
 }
 
 .celebrationPower0::before,
@@ -731,7 +833,7 @@ p {
   display: grid;
   gap: 6px;
   min-width: 180px;
-  padding: 14px 20px;
+  padding: 16px 24px;
   border: 1px solid rgb(215 184 90 / 44%);
   border-radius: 16px;
   background: rgb(7 17 22 / 88%);
@@ -742,12 +844,38 @@ p {
 
 .celebrationTitle strong {
   color: #ffe08a;
-  font-size: 22px;
+  font-size: clamp(24px, 3vw, 42px);
 }
 
 .celebrationTitle span {
   color: #ecfff6;
+  font-size: clamp(16px, 2vw, 26px);
   font-weight: 900;
+}
+
+.celebrationTier3 .celebrationTitle,
+.celebrationTier4 .celebrationTitle,
+.celebrationTier5 .celebrationTitle {
+  border-color: rgb(255 224 138 / 70%);
+  background:
+    radial-gradient(circle at 50% 0, rgb(255 224 138 / 18%), transparent 60%),
+    rgb(7 17 22 / 92%);
+  box-shadow:
+    0 24px 64px rgb(0 0 0 / 52%),
+    0 0 40px rgb(255 224 138 / 20%);
+}
+
+.celebrationRing {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 120px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 2px solid rgb(255 224 138 / 50%);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.2);
+  animation: celebrationRing 1.4s ease-out var(--delay) forwards;
 }
 
 .sparkParticle,
@@ -771,6 +899,14 @@ p {
   animation-duration: 1.75s;
 }
 
+.celebrationTier4 .fireworkParticle,
+.celebrationTier5 .fireworkParticle {
+  width: 14px;
+  box-shadow:
+    0 0 18px hsl(var(--hue) 92% 65% / 86%),
+    0 0 32px hsl(var(--hue) 92% 65% / 42%);
+}
+
 .seats {
   position: absolute;
   inset: 0;
@@ -779,19 +915,24 @@ p {
 
 .seat {
   position: absolute;
-  width: clamp(176px, 18vw, 220px);
-  min-height: 96px;
+  z-index: 2;
+  width: clamp(184px, 17vw, 230px);
+  min-height: 104px;
   border: 1px solid rgb(255 255 255 / 16%);
   border-radius: 14px;
   background:
     linear-gradient(180deg, rgb(17 42 51 / 94%), rgb(10 29 36 / 92%));
   padding: 9px;
   display: grid;
-  grid-template-columns: 66px 1fr;
+  grid-template-columns: 74px 1fr;
   gap: 9px;
   align-items: center;
   pointer-events: auto;
   box-shadow: 0 14px 30px rgb(0 0 0 / 26%);
+}
+
+.seat.mine {
+  z-index: 18;
 }
 
 .seat.active::after {
@@ -832,12 +973,29 @@ p {
 }
 
 .seat.active {
+  z-index: 16;
   border-color: var(--accent-2);
   box-shadow: 0 0 0 3px rgb(215 184 90 / 28%), 0 14px 30px rgb(0 0 0 / 26%);
 }
 
+.seat.mine.active {
+  z-index: 20;
+}
+
 .seat.winnerPulse {
   animation: winnerPulse 0.9s ease-out;
+}
+
+.seat.winnerTier3,
+.seat.winnerTier4,
+.seat.winnerTier5 {
+  animation-duration: 1.35s;
+}
+
+.seat.winnerTier4,
+.seat.winnerTier5 {
+  border-color: #ffe08a;
+  filter: brightness(1.12);
 }
 
 .seat.timeWarning {
@@ -875,7 +1033,7 @@ p {
 }
 
 .seatAvatar {
-  width: 66px;
+  width: 74px;
   aspect-ratio: 1;
   border-radius: 0;
   object-fit: contain;
@@ -907,9 +1065,9 @@ p {
 }
 
 .seat .card {
-  width: 44px;
+  width: 50px;
   border-radius: 6px;
-  font-size: 15px;
+  font-size: 17px;
 }
 
 .seatName {
@@ -956,15 +1114,15 @@ p {
   transform: translate(-50%, -50%);
 }
 
-.pos0 { left: 50%; top: 88%; }
-.pos1 { left: 22%; top: 79%; }
-.pos2 { left: 8%; top: 57%; }
-.pos3 { left: 13%; top: 31%; }
-.pos4 { left: 35%; top: 14%; }
-.pos5 { left: 65%; top: 14%; }
-.pos6 { left: 87%; top: 31%; }
-.pos7 { left: 92%; top: 57%; }
-.pos8 { left: 78%; top: 79%; }
+.pos0 { left: 50%; top: 91%; }
+.pos1 { left: 23%; top: 83%; }
+.pos2 { left: 10%; top: 62%; }
+.pos3 { left: 15%; top: 32%; }
+.pos4 { left: 35%; top: 12%; }
+.pos5 { left: 65%; top: 12%; }
+.pos6 { left: 85%; top: 32%; }
+.pos7 { left: 90%; top: 62%; }
+.pos8 { left: 77%; top: 83%; }
 
 .fairness {
   color: var(--accent-2);
@@ -1209,11 +1367,25 @@ p {
 .emoteBubble {
   position: absolute;
   z-index: 30;
-  width: 226px;
-  height: 136px;
+  width: 250px;
+  height: 166px;
   transform: translateX(-50%);
   pointer-events: auto;
   animation: emoteMenuIn 0.16s ease-out;
+}
+
+.emoteBubbleHint {
+  position: absolute;
+  left: 50%;
+  top: 58px;
+  max-width: 150px;
+  transform: translateX(-50%);
+  color: #dffff2;
+  font-size: 12px;
+  font-weight: 900;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .emoteBubbleChoice {
@@ -1237,11 +1409,12 @@ p {
     linear-gradient(180deg, rgb(68 63 41 / 98%), rgb(24 31 35 / 98%));
 }
 
-.emoteChoice0 { left: 72px; top: 0; }
-.emoteChoice1 { left: 134px; top: 38px; }
-.emoteChoice2 { left: 112px; top: 84px; }
-.emoteChoice3 { left: 26px; top: 84px; }
-.emoteChoice4 { left: 0; top: 38px; }
+.emoteChoice0 { left: 82px; top: 0; }
+.emoteChoice1 { left: 154px; top: 32px; }
+.emoteChoice2 { left: 154px; top: 92px; }
+.emoteChoice3 { left: 82px; top: 124px; }
+.emoteChoice4 { left: 10px; top: 92px; }
+.emoteChoice5 { left: 10px; top: 32px; }
 
 .emoteBubbleTail {
   position: absolute;
@@ -1266,7 +1439,7 @@ p {
 .dealerTipBubble {
   position: absolute;
   z-index: 31;
-  width: 202px;
+  width: 320px;
   transform: translateX(-50%);
   border: 1px solid rgb(215 184 90 / 42%);
   border-radius: 12px;
@@ -1282,6 +1455,38 @@ p {
   display: block;
   margin-bottom: 10px;
   font-size: 14px;
+}
+
+.dealerStats {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.dealerStatsGrid {
+  display: grid;
+  gap: 7px;
+}
+
+.dealerStatsGrid > div {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 8px;
+  border-radius: 7px;
+  background: rgb(255 255 255 / 6%);
+}
+
+.dealerStatsGrid span {
+  color: #c9d8d5;
+  font-size: 12px;
+}
+
+.dealerStatsGrid strong {
+  margin: 0;
+  color: #ffe08a;
+  font-size: 12px;
 }
 
 .dealerTipControls {
@@ -1343,6 +1548,23 @@ p {
   transform: translate(-50%, -50%);
   pointer-events: none;
   animation: chipFly 1.08s cubic-bezier(.2, .84, .18, 1) forwards;
+}
+
+.settlementChipTier3,
+.settlementChipTier4,
+.settlementChipTier5 {
+  width: 20px;
+  background:
+    radial-gradient(circle at 42% 36%, #fff8c9 0 26%, #ffd85b 27% 44%, #c6414b 45% 62%, #ffe27a 63%);
+  box-shadow:
+    0 0 18px rgb(255 224 138 / 56%),
+    0 8px 16px rgb(0 0 0 / 34%);
+  animation-duration: 0.92s;
+}
+
+.settlementChipTier5 {
+  width: 22px;
+  animation-duration: 0.82s;
 }
 
 .betChip {
@@ -2021,6 +2243,20 @@ p {
   100% {
     opacity: 0;
     transform: translateY(-30px) scale(0.96);
+  }
+}
+
+@keyframes celebrationRing {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+  18% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(5.2);
   }
 }
 

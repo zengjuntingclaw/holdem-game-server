@@ -1,14 +1,15 @@
 "use strict";
 
 const $ = (selector) => document.querySelector(selector);
-const CLIENT_VERSION = "0.1.13";
+const CLIENT_VERSION = "0.1.18";
 const DEFAULT_WAGER_AMOUNT = 20;
 const EMOTES = [
   { key: "wellPlayed", text: "打得不错" },
   { key: "amazing", text: "真棒" },
   { key: "hello", text: "你好" },
   { key: "oops", text: "抱歉" },
-  { key: "wow", text: "哇哦" }
+  { key: "wow", text: "哇哦" },
+  { key: "bluff", text: "这是诈唬吧" }
 ];
 const CHIP_SOUND_URLS = [
   "/audio/chip-lay-1.ogg",
@@ -64,13 +65,17 @@ const lobbyView = $("#lobbyView");
 const roomView = $("#roomView");
 const authError = $("#authError");
 
-$("#loginBtn").addEventListener("click", () => auth("login"));
-$("#registerBtn").addEventListener("click", () => auth("register"));
 $("#sendCodeBtn").addEventListener("click", requestEmailCode);
 $("#codeLoginBtn").addEventListener("click", verifyEmailCode);
 $("#logoutBtn").addEventListener("click", logout);
+$("#saveProfileBtn").addEventListener("click", saveProfile);
 $("#createRoomBtn").addEventListener("click", createRoom);
 $("#refreshRoomsBtn").addEventListener("click", loadRooms);
+$("#roomLookupBtn").addEventListener("click", lookupRoom);
+$("#roomLookupInput").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") lookupRoom();
+});
+$("#copyRoomIdBtn").addEventListener("click", copyRoomId);
 $("#backLobbyBtn").addEventListener("click", attemptBackLobby);
 $("#startHandBtn").addEventListener("click", () => send({ type: "startHand" }));
 $("#readyBtn").addEventListener("click", toggleReady);
@@ -128,18 +133,22 @@ $("#dealerSpot").addEventListener("contextmenu", (event) => {
   event.preventDefault();
   openDealerTipMenu();
 });
+$("#dealerSpot").addEventListener("click", (event) => {
+  event.stopPropagation();
+  openDealerTipMenu();
+});
 
 boot();
 
 async function boot() {
   renderRulesSidebar();
   setVersionLabel(CLIENT_VERSION);
-  if (!state.token) {
-    showAuth();
-    return;
-  }
   try {
     const data = await api("/api/me");
+    if (data.token) {
+      state.token = data.token;
+      localStorage.setItem("pokerToken", state.token);
+    }
     state.user = data.user;
     showApp();
     await loadAvatars();
@@ -147,29 +156,6 @@ async function boot() {
     await loadRooms();
   } catch {
     logout();
-  }
-}
-
-async function auth(mode) {
-  authError.textContent = "";
-  const email = $("#email").value.trim();
-  const username = $("#username").value.trim();
-  const password = $("#password").value;
-  try {
-    const data = await api(`/api/${mode}`, {
-      method: "POST",
-      body: JSON.stringify({ email, username, password })
-    }, false);
-    if (data.requiresVerification) {
-      authError.innerHTML = data.devCode
-        ? `${escapeHtml(data.message)}：<span class="devCode">${escapeHtml(data.devCode)}</span>`
-        : escapeHtml(data.message || "请先完成邮箱验证码验证");
-      $("#emailCode").focus();
-      return;
-    }
-    await enterApp(data);
-  } catch (error) {
-    authError.textContent = error.message;
   }
 }
 
@@ -199,10 +185,11 @@ async function verifyEmailCode() {
   authError.textContent = "";
   const email = $("#email").value.trim();
   const code = $("#emailCode").value.trim();
+  const username = $("#username").value.trim();
   try {
     const data = await api("/api/email-code/verify", {
       method: "POST",
-      body: JSON.stringify({ email, code })
+      body: JSON.stringify({ email, code, username })
     }, false);
     await enterApp(data);
   } catch (error) {
@@ -218,6 +205,27 @@ async function enterApp(data) {
   await loadAvatars();
   connect();
   await loadRooms();
+}
+
+async function saveProfile() {
+  const status = $("#profileStatus");
+  const button = $("#saveProfileBtn");
+  status.textContent = "";
+  button.disabled = true;
+  try {
+    const data = await api("/api/me", {
+      method: "PATCH",
+      body: JSON.stringify({ username: $("#profileUsername").value.trim() })
+    });
+    state.user = data.user;
+    renderProfile();
+    status.textContent = "已保存";
+    showToast("昵称已更新");
+  } catch (error) {
+    status.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function api(path, options = {}, authed = true) {
@@ -243,7 +251,7 @@ function connect() {
   });
   state.ws.addEventListener("close", () => {
     setConn("离线，正在重连");
-    setTimeout(() => state.token && connect(), 1200);
+    setTimeout(() => state.user && connect(), 1200);
   });
   state.ws.addEventListener("message", (event) => {
     const message = JSON.parse(event.data);
@@ -462,7 +470,92 @@ function joinRoom(roomId) {
   send({ type: "joinRoom", roomId });
 }
 
-function logout() {
+async function lookupRoom() {
+  const input = $("#roomLookupInput");
+  const result = $("#roomLookupResult");
+  const roomId = input.value.trim().toUpperCase();
+  if (!roomId) {
+    result.classList.remove("hidden");
+    result.innerHTML = `<p class="hint">先输入房间 ID。</p>`;
+    return;
+  }
+  result.classList.remove("hidden");
+  result.innerHTML = `<p class="hint">查询中...</p>`;
+  try {
+    const [activeResult, historyResult] = await Promise.allSettled([
+      api(`/api/rooms/${encodeURIComponent(roomId)}`),
+      api(`/api/history/rooms/${encodeURIComponent(roomId)}`)
+    ]);
+    const activeRoom = activeResult.status === "fulfilled" ? activeResult.value.room : null;
+    const history = historyResult.status === "fulfilled" ? historyResult.value : null;
+    if (!activeRoom && !history) {
+      result.innerHTML = `<p class="error">没找到这个房间。</p>`;
+      return;
+    }
+    result.innerHTML = renderRoomLookupResult(activeRoom, history, roomId);
+    result.querySelector("[data-lookup-join]")?.addEventListener("click", () => joinRoom(activeRoom.id));
+  } catch (error) {
+    result.innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function renderRoomLookupResult(activeRoom, history, roomId) {
+  const room = history?.room;
+  const participants = history?.participants || [];
+  const rows = participants.length
+    ? participants.map((item) => `
+      <div class="ledgerRow">
+        <span>${escapeHtml(item.username)}</span>
+        <span>买入 ${escapeHtml(item.buy_in_chips)}</span>
+        <span>剩余 ${escapeHtml(item.final_chips)}</span>
+        <strong class="${item.net_chips >= 0 ? "gain" : "loss"}">${item.net_chips >= 0 ? "+" : ""}${escapeHtml(item.net_chips)}</strong>
+      </div>
+    `).join("")
+    : `<p class="hint">还没有玩家入座记录。</p>`;
+  return `
+    <div class="lookupCard">
+      <div class="lookupHead">
+        <div>
+          <strong>${escapeHtml(activeRoom?.name || room?.name || "历史房间")}</strong>
+          <p class="hint">#${escapeHtml(activeRoom?.id || room?.id || roomId)}${activeRoom ? " · 当前在线" : " · 历史记录"}</p>
+        </div>
+        ${activeRoom ? `<button type="button" data-lookup-join>进入</button>` : ""}
+      </div>
+      ${room ? `
+        <div class="ledgerSummary">
+          <span>手数 ${escapeHtml(room.hand_count || 0)}</span>
+          <span>盲注 ${escapeHtml(room.small_blind)}/${escapeHtml(room.big_blind)}</span>
+          <span>荷官打赏 ${escapeHtml(room.dealer_tips || 0)}</span>
+        </div>
+        <div class="ledgerRows">${rows}</div>
+      ` : `<p class="hint">这是当前在线房间，暂时还没有历史账本。</p>`}
+    </div>
+  `;
+}
+
+async function copyRoomId() {
+  const roomId = state.roomState?.room?.id;
+  if (!roomId) return;
+  try {
+    await navigator.clipboard.writeText(roomId);
+    showToast(`已复制房间 ID：${roomId}`);
+  } catch {
+    const input = document.createElement("input");
+    input.value = roomId;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand("copy");
+    input.remove();
+    showToast(`已复制房间 ID：${roomId}`);
+  }
+}
+
+async function logout() {
+  try {
+    await api("/api/logout", { method: "POST" });
+  } catch {
+    // Local cleanup still logs the user out if the server is unreachable.
+  }
   localStorage.removeItem("pokerToken");
   state.token = "";
   state.user = null;
@@ -476,6 +569,8 @@ function logout() {
 function showAuth() {
   authView.classList.remove("hidden");
   appView.classList.add("hidden");
+  closeSpectatorsDrawer();
+  $("#spectatorsDrawer")?.classList.add("hidden");
   $("#supportDrawer")?.classList.add("hidden");
 }
 
@@ -483,15 +578,25 @@ function showApp() {
   authView.classList.add("hidden");
   appView.classList.remove("hidden");
   $("#userLabel").textContent = state.user ? state.user.username : "未登录";
+  renderProfile();
   setVersionLabel(state.version || CLIENT_VERSION);
   if (!lobbyView.classList.contains("hidden")) $("#supportDrawer")?.classList.remove("hidden");
   updateBgmToggle();
+}
+
+function renderProfile() {
+  if (!state.user) return;
+  $("#userLabel").textContent = state.user.username;
+  $("#profileEmail").textContent = `邮箱：${state.user.email}`;
+  $("#profileUsername").value = state.user.username || "";
 }
 
 function showLobby() {
   if (state.roomState) send({ type: "leaveRoom" });
   lobbyView.classList.remove("hidden");
   roomView.classList.add("hidden");
+  closeSpectatorsDrawer();
+  $("#spectatorsDrawer")?.classList.add("hidden");
   $("#supportDrawer")?.classList.remove("hidden");
   state.roomState = null;
   clearCountdown();
@@ -501,6 +606,7 @@ function showLobby() {
 function showRoom() {
   lobbyView.classList.add("hidden");
   roomView.classList.remove("hidden");
+  $("#spectatorsDrawer")?.classList.remove("hidden");
   closeSupportDrawer();
   $("#supportDrawer")?.classList.add("hidden");
 }
@@ -943,6 +1049,7 @@ function renderRoom() {
   showRoom();
   $("#roomTitle").textContent = `${snapshot.room.name} #${snapshot.room.id}`;
   $("#handInfo").textContent = `${statusText(snapshot.game.status)} · 第 ${snapshot.game.handNumber} 手 · 盲注 ${snapshot.room.smallBlind}/${snapshot.room.bigBlind}`;
+  $("#copyRoomIdBtn").textContent = `房间 ID：${snapshot.room.id}`;
   $("#board").innerHTML = snapshot.game.board.map(cardHtml).join("") || `<span class="hint">等待发牌</span>`;
   $("#potValue").textContent = snapshot.game.pot;
   $("#lastAction").innerHTML = fairnessHtml(snapshot.game);
@@ -988,6 +1095,10 @@ function renderRoom() {
     button.addEventListener("click", () => send({ type: "sit", seat: Number(button.dataset.sit) }));
   });
   $("#seats").querySelectorAll(".seat:not(.empty)[data-seat]").forEach((seatEl) => {
+    seatEl.querySelector(".seatAvatar")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openEmoteMenu(Number(seatEl.dataset.seat));
+    });
     seatEl.addEventListener("contextmenu", (event) => {
       event.preventDefault();
       openEmoteMenu(Number(seatEl.dataset.seat));
@@ -1084,6 +1195,7 @@ function seatHtml(seat, index, game, mySeat, activeHand) {
   }
   const classes = ["seat", posClass];
   if (game.actingSeat === index) classes.push("active");
+  if (mySeat?.seat === index) classes.push("mine");
   if (seat.folded) classes.push("folded");
   if (!seat.connected) classes.push("disconnected");
   const badges = [];
@@ -1198,8 +1310,10 @@ function renderSettlement(game) {
     panel.innerHTML = "";
     return;
   }
+  const impact = settlementImpact(game.winners);
+  panel.className = `settlementPanel settlementTier${impact.tier}`;
   panel.innerHTML = `
-    <div class="settlementTitle">奖池分配</div>
+    <div class="settlementTitle">${escapeHtml(impact.title)}</div>
     ${game.winners.map((winner) => `
       <div class="settlementRow">
         <span>${escapeHtml(winner.pot || "底池")}</span>
@@ -1220,6 +1334,21 @@ function maybeAnimateSettlement(snapshot) {
   setTimeout(() => animateHandCelebration(snapshot.game.winners), 360);
 }
 
+function settlementImpact(winners) {
+  const best = (winners || []).reduce((acc, winner) => {
+    const power = handPowerFromWinner(winner);
+    const amount = Number(winner.amount || 0);
+    const score = power * 100000 + amount;
+    return score > acc.score ? { winner, power, amount, score } : acc;
+  }, { winner: null, power: 0, amount: 0, score: -1 });
+  const total = (winners || []).reduce((sum, winner) => sum + Number(winner.amount || 0), 0);
+  const amountTier = total >= 800 ? 3 : total >= 300 ? 2 : total >= 80 ? 1 : 0;
+  const handTier = best.power >= 7 ? 4 : best.power >= 5 ? 3 : best.power >= 3 ? 2 : best.power >= 1 ? 1 : 0;
+  const tier = Math.min(5, Math.max(amountTier, handTier));
+  const title = tier >= 5 ? "爆炸奖池" : tier >= 4 ? "高能结算" : tier >= 3 ? "大牌命中" : tier >= 2 ? "漂亮收池" : "奖池分配";
+  return { tier, title, power: best.power, amount: best.amount, total };
+}
+
 function animatePotToWinners(winners) {
   const pot = $(".pot");
   const host = roomView;
@@ -1227,29 +1356,31 @@ function animatePotToWinners(winners) {
   const base = host.getBoundingClientRect();
   const potRect = pot.getBoundingClientRect();
   playChipSound(0.5);
+  const impact = settlementImpact(winners);
   winners.forEach((winner, winnerIndex) => {
     const target = Number.isInteger(winner.seat) ? document.querySelector(`[data-seat="${winner.seat}"]`) : null;
     if (!target) return;
     const targetRect = target.getBoundingClientRect();
-    const chips = Math.min(10, Math.max(4, Math.ceil(Number(winner.amount || 0) / 20)));
+    const chips = Math.min(24, Math.max(5 + impact.tier * 2, Math.ceil(Number(winner.amount || 0) / 16)));
     for (let i = 0; i < chips; i += 1) {
       const chip = document.createElement("span");
-      chip.className = "flyingChip";
+      chip.className = `flyingChip settlementChip settlementChipTier${impact.tier}`;
       const startX = potRect.left + potRect.width / 2 - base.left;
       const startY = potRect.top + potRect.height / 2 - base.top;
-      const endX = targetRect.left + targetRect.width / 2 - base.left + (i % 3 - 1) * 10;
-      const endY = targetRect.top + targetRect.height / 2 - base.top + (Math.floor(i / 3) - 1) * 8;
+      const spread = 10 + impact.tier * 4;
+      const endX = targetRect.left + targetRect.width / 2 - base.left + (i % 5 - 2) * spread;
+      const endY = targetRect.top + targetRect.height / 2 - base.top + (Math.floor(i / 5) - 1) * Math.max(8, spread - 3);
       chip.style.left = `${startX}px`;
       chip.style.top = `${startY}px`;
       chip.style.setProperty("--dx", `${endX - startX}px`);
       chip.style.setProperty("--dy", `${endY - startY}px`);
-      chip.style.animationDelay = `${winnerIndex * 0.2 + i * 0.055}s`;
+      chip.style.animationDelay = `${winnerIndex * 0.16 + i * Math.max(0.025, 0.055 - impact.tier * 0.005)}s`;
       host.appendChild(chip);
       setTimeout(() => chip.remove(), 1500 + winnerIndex * 200 + i * 60);
     }
     setTimeout(() => {
-      target.classList.add("winnerPulse");
-      setTimeout(() => target.classList.remove("winnerPulse"), 900);
+      target.classList.add("winnerPulse", `winnerTier${impact.tier}`);
+      setTimeout(() => target.classList.remove("winnerPulse", `winnerTier${impact.tier}`), 1000 + impact.tier * 160);
     }, winnerIndex * 220 + 520);
   });
 }
@@ -1268,10 +1399,12 @@ function animateHandCelebration(winners) {
     return power > acc.power ? { power, winner } : acc;
   }, { power: 0, winner: winners[0] });
   const power = best.power;
+  const impact = settlementImpact(winners);
   playSettlementSound(power);
   const overlay = document.createElement("div");
-  overlay.className = `celebrationOverlay celebrationPower${Math.min(8, power)}`;
-  const burstCount = power >= 8 ? 70 : power >= 7 ? 58 : power >= 6 ? 44 : power >= 4 ? 30 : power >= 2 ? 18 : 8;
+  overlay.className = `celebrationOverlay celebrationPower${Math.min(8, power)} celebrationTier${impact.tier}`;
+  overlay.style.setProperty("--celebration-scale", String(1 + impact.tier * 0.18));
+  const burstCount = Math.min(130, (power >= 8 ? 78 : power >= 7 ? 64 : power >= 6 ? 48 : power >= 4 ? 34 : power >= 2 ? 22 : 10) + impact.tier * 10);
   overlay.innerHTML = `
     <div class="celebrationTitle">
       <strong>${escapeHtml(best.winner.hand || "赢得底池")}</strong>
@@ -1282,15 +1415,21 @@ function animateHandCelebration(winners) {
     const particle = document.createElement("span");
     particle.className = power >= 6 ? "fireworkParticle" : "sparkParticle";
     const angle = (Math.PI * 2 * i) / burstCount;
-    const radius = 90 + Math.random() * (power >= 6 ? 230 : 120);
+    const radius = 100 + impact.tier * 34 + Math.random() * (power >= 6 ? 260 + impact.tier * 42 : 130 + impact.tier * 26);
     particle.style.setProperty("--x", `${Math.cos(angle) * radius}px`);
     particle.style.setProperty("--y", `${Math.sin(angle) * radius}px`);
     particle.style.setProperty("--delay", `${Math.random() * 0.42}s`);
     particle.style.setProperty("--hue", `${38 + Math.random() * 290}`);
     overlay.appendChild(particle);
   }
+  for (let i = 0; i < impact.tier; i += 1) {
+    const ring = document.createElement("span");
+    ring.className = "celebrationRing";
+    ring.style.setProperty("--delay", `${i * 0.16}s`);
+    overlay.appendChild(ring);
+  }
   host.appendChild(overlay);
-  setTimeout(() => overlay.remove(), 2100 + power * 180);
+  setTimeout(() => overlay.remove(), 2400 + power * 190 + impact.tier * 120);
 }
 
 function clearCountdown(hide = true) {
@@ -1319,16 +1458,18 @@ function openEmoteMenu(targetSeat) {
   closeEmoteMenu();
   state.emoteMenuTargetSeat = explicitTargetSeat;
 
-  const mySeatEl = document.querySelector(`[data-seat="${mySeat.seat}"]`);
+  const anchorSeat = explicitTargetSeat !== null ? explicitTargetSeat : mySeat.seat;
+  const anchorSeatEl = document.querySelector(`[data-seat="${anchorSeat}"]`);
   const surface = $(".tableSurface");
   const host = roomView;
-  if (!mySeatEl || !surface) return;
+  if (!anchorSeatEl || !surface) return;
   const base = host.getBoundingClientRect();
-  const seatRect = mySeatEl.getBoundingClientRect();
+  const seatRect = (anchorSeatEl.querySelector(".seatAvatar") || anchorSeatEl).getBoundingClientRect();
   const surfaceRect = surface.getBoundingClientRect();
   const bubble = document.createElement("div");
   bubble.className = "emoteBubble";
   bubble.innerHTML = `
+    ${target ? `<div class="emoteBubbleHint">对 ${escapeHtml(target.username)} 说：</div>` : ""}
     <div class="emoteBubbleTail"></div>
     ${EMOTES.map((emote, index) => `
       <button type="button" class="emoteBubbleChoice emoteChoice${index}" data-emote="${emote.key}">
@@ -1361,37 +1502,33 @@ function closeEmoteMenu() {
   state.emoteMenuTargetSeat = null;
 }
 
-function openDealerTipMenu() {
+async function openDealerTipMenu() {
   const snapshot = state.roomState;
   if (!snapshot || !state.user) return;
   const mySeat = snapshot.seats.find((seat) => seat && seat.userId === state.user.id);
-  if (!mySeat) {
-    showToast("先坐下，再打赏荷官。", "warn");
-    return;
-  }
-  if (!["waiting", "showdown"].includes(snapshot.game.status)) {
-    showToast("手牌进行中不能打赏，以免影响下注筹码。", "warn");
-    return;
-  }
+  const canTip = Boolean(mySeat) && ["waiting", "showdown"].includes(snapshot.game.status);
   closeEmoteMenu();
   closeDealerTipMenu();
 
-  const mySeatEl = document.querySelector(`[data-seat="${mySeat.seat}"]`);
+  const dealerEl = $("#dealerSpot");
   const surface = $(".tableSurface");
   const host = roomView;
-  if (!mySeatEl || !surface) return;
+  if (!dealerEl || !surface) return;
   const base = host.getBoundingClientRect();
-  const seatRect = mySeatEl.getBoundingClientRect();
+  const seatRect = dealerEl.getBoundingClientRect();
   const surfaceRect = surface.getBoundingClientRect();
   const bubble = document.createElement("div");
   bubble.className = "dealerTipBubble";
   bubble.innerHTML = `
     <div class="dealerTipTail"></div>
-    <strong>打赏荷官</strong>
-    <div class="dealerTipControls">
-      <input class="dealerTipBubbleAmount" type="number" min="1" step="1" value="5">
-      <button type="button" class="dealerTipBubbleButton">打赏</button>
-    </div>
+    <strong>荷官记录板</strong>
+    <div class="dealerStats">正在查询历史最...</div>
+    ${canTip ? `
+      <div class="dealerTipControls">
+        <input class="dealerTipBubbleAmount" type="number" min="1" step="1" value="5">
+        <button type="button" class="dealerTipBubbleButton">打赏</button>
+      </div>
+    ` : `<p class="hint">手牌进行中不能打赏；旁观也可以查看记录。</p>`}
   `;
   const centerX = seatRect.left + seatRect.width / 2 - base.left;
   const clampedX = Math.min(Math.max(centerX, 118), Math.max(118, base.width - 118));
@@ -1405,12 +1542,44 @@ function openDealerTipMenu() {
     bubble.classList.add("dropDown");
   }
   host.appendChild(bubble);
+  try {
+    const history = await api(`/api/history/rooms/${encodeURIComponent(snapshot.room.id)}`);
+    bubble.querySelector(".dealerStats").innerHTML = dealerStatsHtml(history.stats);
+  } catch (error) {
+    bubble.querySelector(".dealerStats").innerHTML = `<p class="error">${escapeHtml(error.message)}</p>`;
+  }
   const input = bubble.querySelector(".dealerTipBubbleAmount");
-  bubble.querySelector(".dealerTipBubbleButton").addEventListener("click", (event) => {
-    event.stopPropagation();
-    tipDealer(Number(input.value || 5));
-  });
-  input.addEventListener("click", (event) => event.stopPropagation());
+  const button = bubble.querySelector(".dealerTipBubbleButton");
+  if (input && button) {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      tipDealer(Number(input.value || 5));
+    });
+    input.addEventListener("click", (event) => event.stopPropagation());
+  }
+}
+
+function dealerStatsHtml(stats = {}) {
+  const ms = (value) => {
+    const seconds = Math.round(Number(value || 0) / 1000);
+    if (!seconds) return "暂无";
+    const minutes = Math.floor(seconds / 60);
+    const rest = seconds % 60;
+    return minutes ? `${minutes}分${rest}秒` : `${rest}秒`;
+  };
+  const userValue = (item, empty = "暂无") => item?.username ? `${escapeHtml(item.username)} ${escapeHtml(item.value)}` : empty;
+  const handValue = (item, formatter = (value) => value) => item?.hand_number ? `第 ${escapeHtml(item.hand_number)} 手 · ${escapeHtml(formatter(item.value))}` : "暂无";
+  return `
+    <div class="dealerStatsGrid">
+      <div><span>历史最高筹码</span><strong>${userValue(stats.highestStack)}</strong></div>
+      <div><span>历史最大赢家</span><strong>${userValue(stats.biggestWin)}</strong></div>
+      <div><span>历史最大亏损</span><strong>${userValue(stats.biggestLoss)}</strong></div>
+      <div><span>历史最大底池</span><strong>${handValue(stats.biggestPot)}</strong></div>
+      <div><span>历史最长单局</span><strong>${handValue(stats.longestHand, ms)}</strong></div>
+      <div><span>最多打赏荷官</span><strong>${userValue(stats.mostTips)}</strong></div>
+    </div>
+    <p class="hint">已记录 ${escapeHtml(stats.handCount || 0)} 手牌、${escapeHtml(stats.actionCount || 0)} 个动作。</p>
+  `;
 }
 
 function closeDealerTipMenu() {
@@ -1611,7 +1780,7 @@ function cardHtml(card) {
   const suitText = { s: "♠", h: "♥", d: "♦", c: "♣" }[suit] || suit;
   const red = suit === "h" || suit === "d" ? " red" : "";
   const rankText = card[0] === "T" ? "10" : card[0];
-  return `<span class="card${red}">${rankText}${suitText}</span>`;
+  return `<span class="card${red}"><span class="cardRank">${rankText}</span><span class="cardSuit">${suitText}</span></span>`;
 }
 
 function statusText(status) {

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Texas Hold'em MVP</title>
-  <link rel="stylesheet" href="/styles.css?v=0.1.13">
+  <link rel="stylesheet" href="/styles.css?v=0.1.18">
 </head>
 <body>
   <main class="shell">
@@ -13,7 +13,7 @@
         <span class="mark">TH</span>
         <div>
           <h1>德州扑克服务器</h1>
-          <p>注册账号，创建房间，实时开局。</p>
+          <p>邮箱验证码登录，创建房间，实时开局。</p>
         </div>
       </div>
       <form id="authForm" class="panel">
@@ -23,21 +23,13 @@
         </label>
         <label>
           昵称
-          <input id="username" name="username" autocomplete="nickname" maxlength="20" placeholder="牌桌显示名，可选">
+          <input id="username" name="username" autocomplete="nickname" maxlength="20" placeholder="第一次登录可填，之后可在大厅修改">
         </label>
-        <label>
-          密码
-          <input id="password" name="password" type="password" autocomplete="current-password" minlength="6" required>
-        </label>
-        <div class="row">
-          <button id="loginBtn" type="button">登录</button>
-          <button id="registerBtn" type="button" class="secondary">注册</button>
-        </div>
         <div class="codeRow">
           <input id="emailCode" inputmode="numeric" maxlength="6" placeholder="邮箱验证码">
           <button id="sendCodeBtn" type="button" class="secondary">获取验证码</button>
         </div>
-        <button id="codeLoginBtn" type="button" class="emailCode">验证码登录</button>
+        <button id="codeLoginBtn" type="button" class="emailCode">登录 / 创建账号</button>
         <p id="authError" class="error"></p>
       </form>
     </section>
@@ -49,7 +41,7 @@
           <span id="connLabel">离线</span>
         </div>
         <div class="topActions">
-          <span id="versionLabel" class="versionLabel">v0.1.13</span>
+          <span id="versionLabel" class="versionLabel">v0.1.18</span>
           <button id="bgmToggleBtn" class="ghost soundToggle" type="button" aria-pressed="false">BGM 开</button>
           <button id="logoutBtn" class="ghost">退出</button>
         </div>
@@ -57,6 +49,16 @@
 
       <section id="lobbyView" class="layout">
         <aside class="panel lobbyTools">
+          <section class="profileBox">
+            <h2>我的账号</h2>
+            <p id="profileEmail" class="hint">邮箱</p>
+            <label>
+              昵称
+              <input id="profileUsername" maxlength="20" autocomplete="nickname">
+            </label>
+            <button id="saveProfileBtn" type="button" class="secondary">保存昵称</button>
+            <p id="profileStatus" class="hint"></p>
+          </section>
           <h2>创建房间</h2>
           <label>
             房间名
@@ -84,6 +86,13 @@
             <h2>大厅</h2>
             <button id="refreshRoomsBtn" class="secondary">刷新</button>
           </div>
+          <section class="roomLookup">
+            <div class="codeRow">
+              <input id="roomLookupInput" maxlength="32" placeholder="输入房间 ID 查询">
+              <button id="roomLookupBtn" type="button" class="secondary">查询</button>
+            </div>
+            <div id="roomLookupResult" class="roomLookupResult hidden"></div>
+          </section>
           <div id="resumeRoom" class="resumeRoom hidden"></div>
           <div id="rooms"></div>
         </section>
@@ -95,6 +104,7 @@
           <div>
             <h2 id="roomTitle">牌桌</h2>
             <p id="handInfo"></p>
+            <button id="copyRoomIdBtn" type="button" class="roomIdPill">房间 ID：--</button>
           </div>
         </div>
 
@@ -191,7 +201,7 @@
         </section>
       </section>
     </section>
-    <aside id="spectatorsDrawer" class="sideDrawer spectatorsDrawer">
+    <aside id="spectatorsDrawer" class="sideDrawer spectatorsDrawer hidden">
       <button id="spectatorsToggle" class="sideToggle spectatorsToggle" type="button" aria-label="查看观众">观众 0 &gt;</button>
       <div class="rulesPanel spectatorsDrawerPanel">
         <div class="rulesHead">
@@ -264,6 +274,6 @@
   </main>
 
   <div id="toastStack" class="toastStack" aria-live="polite" aria-atomic="false"></div>
-  <script src="/app.js?v=0.1.13"></script>
+  <script src="/app.js?v=0.1.18"></script>
 </body>
 </html>
