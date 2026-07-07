@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Texas Hold'em MVP</title>
-  <link rel="stylesheet" href="/styles.css?v=0.1.18">
+  <link rel="stylesheet" href="/styles.css?v=0.1.19">
 </head>
 <body>
   <main class="shell">
@@ -41,7 +41,7 @@
           <span id="connLabel">离线</span>
         </div>
         <div class="topActions">
-          <span id="versionLabel" class="versionLabel">v0.1.18</span>
+          <span id="versionLabel" class="versionLabel">v0.1.19</span>
           <button id="bgmToggleBtn" class="ghost soundToggle" type="button" aria-pressed="false">BGM 开</button>
           <button id="logoutBtn" class="ghost">退出</button>
         </div>
@@ -176,7 +176,26 @@
           </div>
         </section>
 
-        <section class="panel chat">
+      </section>
+    </section>
+    <aside id="spectatorsDrawer" class="sideDrawer spectatorsDrawer hidden">
+      <button id="spectatorsToggle" class="sideToggle spectatorsToggle" type="button" aria-label="查看观众">观众 0 &gt;</button>
+      <div class="rulesPanel spectatorsDrawerPanel">
+        <div class="rulesHead">
+          <h2>观众</h2>
+          <button id="spectatorsClose" class="ghost" type="button">收起</button>
+        </div>
+        <div id="spectators" class="spectatorsPanel"></div>
+      </div>
+    </aside>
+    <aside id="chatDrawer" class="sideDrawer chatDrawer hidden">
+      <button id="chatToggle" class="sideToggle chatToggle" type="button" aria-label="查看聊天">聊天 &gt;</button>
+      <div class="rulesPanel chatDrawerPanel">
+        <div class="rulesHead">
+          <h2>聊天</h2>
+          <button id="chatClose" class="ghost" type="button">收起</button>
+        </div>
+        <section class="chat">
           <div class="socialTools">
             <div id="avatarChoices" class="avatarChoices"></div>
             <div class="emoteTools">
@@ -199,16 +218,6 @@
             <button>发送</button>
           </form>
         </section>
-      </section>
-    </section>
-    <aside id="spectatorsDrawer" class="sideDrawer spectatorsDrawer hidden">
-      <button id="spectatorsToggle" class="sideToggle spectatorsToggle" type="button" aria-label="查看观众">观众 0 &gt;</button>
-      <div class="rulesPanel spectatorsDrawerPanel">
-        <div class="rulesHead">
-          <h2>观众</h2>
-          <button id="spectatorsClose" class="ghost" type="button">收起</button>
-        </div>
-        <div id="spectators" class="spectatorsPanel"></div>
       </div>
     </aside>
     <aside id="rulesDrawer" class="sideDrawer rulesDrawer">
@@ -274,6 +283,6 @@
   </main>
 
   <div id="toastStack" class="toastStack" aria-live="polite" aria-atomic="false"></div>
-  <script src="/app.js?v=0.1.18"></script>
+  <script src="/app.js?v=0.1.19"></script>
 </body>
 </html>

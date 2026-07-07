@@ -798,6 +798,19 @@ p {
   font-style: normal;
 }
 
+.settlementBestCards {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  padding: 2px 0 8px 80px;
+}
+
+.settlementBestCards .card {
+  width: 34px;
+  height: 46px;
+  font-size: 15px;
+}
+
 .celebrationOverlay {
   position: absolute;
   inset: 0;
@@ -851,6 +864,20 @@ p {
   color: #ecfff6;
   font-size: clamp(16px, 2vw, 26px);
   font-weight: 900;
+}
+
+.celebrationCards {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.celebrationCards .card {
+  width: clamp(42px, 4.2vw, 58px);
+  height: clamp(58px, 5.6vw, 78px);
+  font-size: clamp(19px, 2vw, 27px);
+  box-shadow: 0 14px 26px rgb(0 0 0 / 34%);
 }
 
 .celebrationTier3 .celebrationTitle,
@@ -986,6 +1013,10 @@ p {
   animation: winnerPulse 0.9s ease-out;
 }
 
+.seatAvatar.winnerAvatarPulse {
+  animation: winnerAvatarPulse 1s ease-out;
+}
+
 .seat.winnerTier3,
 .seat.winnerTier4,
 .seat.winnerTier5 {
@@ -1003,11 +1034,33 @@ p {
 }
 
 .seat.folded {
-  opacity: 0.56;
+  background:
+    linear-gradient(180deg, rgb(17 42 51 / 54%), rgb(10 29 36 / 48%));
+  border-color: rgb(255 255 255 / 10%);
+  box-shadow: 0 10px 22px rgb(0 0 0 / 18%);
 }
 
-.seat.disconnected {
-  filter: grayscale(0.55);
+.seat.folded .seatAvatar,
+.seat.folded .seatTop,
+.seat.folded .badges,
+.seat.folded .hint {
+  opacity: 0.58;
+}
+
+.seat.folded .cards,
+.seat.folded .card,
+.seat.disconnected .cards,
+.seat.disconnected .card {
+  opacity: 1;
+  filter: none;
+}
+
+.seat.disconnected .seatAvatar,
+.seat.disconnected .seatTop,
+.seat.disconnected .badges,
+.seat.disconnected .hint {
+  opacity: 0.72;
+  filter: grayscale(0.5);
 }
 
 .seat.disconnected::before {
@@ -1232,8 +1285,51 @@ p {
   min-height: 26px;
   padding: 0;
   border: 0;
-  background: transparent;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, #35c486 var(--range-progress, 0%), rgb(50 68 78 / 88%) var(--range-progress, 0%));
   accent-color: var(--accent);
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.amountRange:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.amountRange::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.amountRange::-webkit-slider-thumb {
+  width: 22px;
+  height: 22px;
+  margin-top: -7px;
+  border: 3px solid #fff3bf;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 36% 34%, #fff8cf 0 20%, #d7b85a 21% 48%, #7c5540 49% 66%, #d7b85a 67%);
+  box-shadow: 0 0 0 4px rgb(215 184 90 / 16%), 0 8px 16px rgb(0 0 0 / 32%);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.amountRange::-moz-range-track {
+  height: 8px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.amountRange::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 3px solid #fff3bf;
+  border-radius: 50%;
+  background: #d7b85a;
 }
 
 .quickBets {
@@ -1269,6 +1365,16 @@ p {
 .actionButtons.isMyTurn {
   border-color: rgb(53 196 134 / 35%);
   background: rgb(53 196 134 / 7%);
+}
+
+.actionButtons.canCheck #checkBtn {
+  border-color: rgb(215 184 90 / 42%);
+  color: #fff5d4;
+}
+
+.actionButtons.needsCall #callBtn {
+  border-color: rgb(53 196 134 / 48%);
+  color: #eafff5;
 }
 
 .presetControls {
@@ -1308,7 +1414,6 @@ p {
 }
 
 .chat {
-  margin-top: 16px;
   display: grid;
   gap: 12px;
 }
@@ -1567,6 +1672,29 @@ p {
   animation-duration: 0.82s;
 }
 
+.avatarPrizeBurst {
+  position: absolute;
+  z-index: 38;
+  width: 9px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  pointer-events: none;
+  background: #ffe08a;
+  box-shadow: 0 0 14px rgb(255 224 138 / 72%);
+  animation: avatarPrizeBurst 1.05s ease-out var(--delay, 0s) forwards;
+}
+
+.avatarPrizeBurstTier3,
+.avatarPrizeBurstTier4,
+.avatarPrizeBurstTier5 {
+  width: 12px;
+  background:
+    radial-gradient(circle, #ffffff 0 22%, #ffe08a 23% 58%, #df5962 59%);
+  box-shadow:
+    0 0 18px rgb(255 224 138 / 88%),
+    0 0 32px rgb(223 89 98 / 38%);
+}
+
 .betChip {
   background:
     radial-gradient(circle at center, #fbf5c6 0 30%, #35c486 31% 56%, #f5cb58 57%);
@@ -1674,7 +1802,8 @@ p {
   transform: translateX(0);
 }
 
-.spectatorsDrawer {
+.spectatorsDrawer,
+.chatDrawer {
   left: 0;
   right: auto;
   width: min(300px, calc(100vw - 48px));
@@ -1696,7 +1825,8 @@ p {
   box-shadow: 0 14px 34px rgb(0 0 0 / 36%);
 }
 
-.spectatorsDrawer .sideToggle {
+.spectatorsDrawer .sideToggle,
+.chatDrawer .sideToggle {
   left: auto;
   right: 0;
   border-radius: 0 10px 10px 0;
@@ -1705,6 +1835,11 @@ p {
 
 .spectatorsToggle {
   top: 38%;
+  border-color: rgb(53 196 134 / 34%);
+}
+
+.chatToggle {
+  top: calc(38% + 104px);
   border-color: rgb(53 196 134 / 34%);
 }
 
@@ -1733,12 +1868,28 @@ p {
   box-shadow: -22px 0 54px rgb(0 0 0 / 38%);
 }
 
-.spectatorsDrawerPanel {
+.spectatorsDrawerPanel,
+.chatDrawerPanel {
   margin-right: 48px;
   margin-left: 0;
   border-right: 1px solid var(--line);
   border-left: 0;
   box-shadow: 22px 0 54px rgb(0 0 0 / 38%);
+}
+
+.chatDrawerPanel {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 14px;
+}
+
+.chatDrawerPanel .chat {
+  min-height: 0;
+}
+
+.chatDrawerPanel .messages {
+  min-height: min(420px, 48vh);
+  max-height: min(520px, 56vh);
 }
 
 .feedbackPanel {
@@ -2299,5 +2450,39 @@ p {
   }
   100% {
     box-shadow: 0 0 0 0 rgb(215 184 90 / 0), 0 14px 30px rgb(0 0 0 / 26%);
+  }
+}
+
+@keyframes winnerAvatarPulse {
+  0% {
+    transform: scale(1);
+    filter: drop-shadow(0 8px 10px rgb(0 0 0 / 36%));
+  }
+  36% {
+    transform: scale(1.18);
+    filter:
+      drop-shadow(0 0 18px rgb(255 224 138 / 80%))
+      drop-shadow(0 10px 16px rgb(0 0 0 / 38%));
+  }
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 8px 10px rgb(0 0 0 / 36%));
+  }
+}
+
+@keyframes avatarPrizeBurst {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.25);
+  }
+  18% {
+    opacity: 1;
+  }
+  78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) scale(0.9);
   }
 }

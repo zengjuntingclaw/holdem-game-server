@@ -1,7 +1,7 @@
 "use strict";
 
 const $ = (selector) => document.querySelector(selector);
-const CLIENT_VERSION = "0.1.18";
+const CLIENT_VERSION = "0.1.19";
 const DEFAULT_WAGER_AMOUNT = 20;
 const EMOTES = [
   { key: "wellPlayed", text: "打得不错" },
@@ -85,6 +85,8 @@ $("#sendEmoteBtn").addEventListener("click", () => sendEmote());
 $("#dealerTipBtn").addEventListener("click", tipDealer);
 $("#spectatorsToggle").addEventListener("click", toggleSpectatorsDrawer);
 $("#spectatorsClose").addEventListener("click", closeSpectatorsDrawer);
+$("#chatToggle").addEventListener("click", toggleChatDrawer);
+$("#chatClose").addEventListener("click", closeChatDrawer);
 $("#rulesToggle").addEventListener("click", toggleRulesDrawer);
 $("#rulesClose").addEventListener("click", closeRulesDrawer);
 $("#feedbackToggle").addEventListener("click", toggleFeedbackDrawer);
@@ -315,6 +317,7 @@ function normalizedWagerAmount() {
 function syncAmountFromRange() {
   const range = $("#amountRange");
   $("#amountInput").value = range.value;
+  updateRangeFill(range);
   rememberWagerAmount(Number(range.value));
 }
 
@@ -326,6 +329,7 @@ function syncAmountFromInput() {
   const value = clampNumber(Number(input.value || min), min, max);
   input.value = value;
   range.value = value;
+  updateRangeFill(range);
   rememberWagerAmount(value);
 }
 
@@ -353,7 +357,17 @@ function setBetAmount(amount) {
   const value = clampNumber(Math.floor(Number(amount) || min), min, max);
   range.value = value;
   $("#amountInput").value = value;
+  updateRangeFill(range);
   rememberWagerAmount(value);
+}
+
+function updateRangeFill(range = $("#amountRange")) {
+  if (!range) return;
+  const min = Number(range.min || 0);
+  const max = Number(range.max || min);
+  const value = Number(range.value || min);
+  const progress = max > min ? ((value - min) / (max - min)) * 100 : 100;
+  range.style.setProperty("--range-progress", `${clampNumber(progress, 0, 100)}%`);
 }
 
 function updateAmountValue(value) {
@@ -571,6 +585,8 @@ function showAuth() {
   appView.classList.add("hidden");
   closeSpectatorsDrawer();
   $("#spectatorsDrawer")?.classList.add("hidden");
+  closeChatDrawer();
+  $("#chatDrawer")?.classList.add("hidden");
   $("#supportDrawer")?.classList.add("hidden");
 }
 
@@ -597,6 +613,8 @@ function showLobby() {
   roomView.classList.add("hidden");
   closeSpectatorsDrawer();
   $("#spectatorsDrawer")?.classList.add("hidden");
+  closeChatDrawer();
+  $("#chatDrawer")?.classList.add("hidden");
   $("#supportDrawer")?.classList.remove("hidden");
   state.roomState = null;
   clearCountdown();
@@ -607,6 +625,7 @@ function showRoom() {
   lobbyView.classList.add("hidden");
   roomView.classList.remove("hidden");
   $("#spectatorsDrawer")?.classList.remove("hidden");
+  $("#chatDrawer")?.classList.remove("hidden");
   closeSupportDrawer();
   $("#supportDrawer")?.classList.add("hidden");
 }
@@ -734,6 +753,19 @@ function closeSpectatorsDrawer() {
   updateSideDrawerLabels();
 }
 
+function toggleChatDrawer() {
+  const drawer = $("#chatDrawer");
+  const willOpen = !drawer.classList.contains("open");
+  closeSideDrawers();
+  if (willOpen) drawer.classList.add("open");
+  updateSideDrawerLabels();
+}
+
+function closeChatDrawer() {
+  $("#chatDrawer").classList.remove("open");
+  updateSideDrawerLabels();
+}
+
 function toggleFeedbackDrawer() {
   const drawer = $("#feedbackDrawer");
   const willOpen = !drawer.classList.contains("open");
@@ -765,6 +797,7 @@ function closeSupportDrawer() {
 
 function closeSideDrawers() {
   $("#spectatorsDrawer")?.classList.remove("open");
+  $("#chatDrawer")?.classList.remove("open");
   $("#rulesDrawer")?.classList.remove("open");
   $("#feedbackDrawer")?.classList.remove("open");
   $("#supportDrawer")?.classList.remove("open");
@@ -773,11 +806,13 @@ function closeSideDrawers() {
 
 function updateSideDrawerLabels() {
   const spectatorsOpen = $("#spectatorsDrawer")?.classList.contains("open");
+  const chatOpen = $("#chatDrawer")?.classList.contains("open");
   const rulesOpen = $("#rulesDrawer")?.classList.contains("open");
   const feedbackOpen = $("#feedbackDrawer")?.classList.contains("open");
   const supportOpen = $("#supportDrawer")?.classList.contains("open");
   const spectatorCount = $("#spectators")?.dataset.count || "0";
   if ($("#spectatorsToggle")) $("#spectatorsToggle").innerHTML = `观众 ${spectatorCount} ${spectatorsOpen ? "&lt;" : "&gt;"}`;
+  if ($("#chatToggle")) $("#chatToggle").innerHTML = `聊天 ${chatOpen ? "&lt;" : "&gt;"}`;
   if ($("#rulesToggle")) $("#rulesToggle").innerHTML = `牌型 ${rulesOpen ? "&gt;" : "&lt;"}`;
   if ($("#feedbackToggle")) $("#feedbackToggle").innerHTML = `意见 ${feedbackOpen ? "&gt;" : "&lt;"}`;
   if ($("#supportToggle")) $("#supportToggle").innerHTML = `随缘 ${supportOpen ? "&gt;" : "&lt;"}`;
@@ -1067,6 +1102,7 @@ function renderRoom() {
   const activeHand = !["waiting", "showdown"].includes(snapshot.game.status);
   const canReady = Boolean(mySeat) && !activeHand;
   $("#callBtn").textContent = callAmount > 0 ? `跟注 ${callAmount}` : "跟注";
+  $("#checkBtn").textContent = callAmount > 0 ? "过牌" : "让牌";
   $("#readyBtn").textContent = mySeat?.ready ? "取消准备" : "准备";
   $("#readyBtn").disabled = !canReady;
   $("#readyBtn").classList.toggle("readyActive", canReady && !mySeat?.ready);
@@ -1078,6 +1114,8 @@ function renderRoom() {
   $("#foldBtn").disabled = !isMyTurn;
   $("#betBtn").disabled = !isMyTurn || snapshot.game.currentBet > 0 || maxWagerTotal <= 0;
   $("#raiseBtn").disabled = !isMyTurn || snapshot.game.currentBet === 0 || !mySeat?.canRaise;
+  $("#actionButtons").classList.toggle("needsCall", callAmount > 0);
+  $("#actionButtons").classList.toggle("canCheck", callAmount === 0);
   renderWagerControls(snapshot, mySeat, isMyTurn, activeHand);
   $("#randomAvatarBtn").disabled = !mySeat || activeHand || !state.avatars.length;
   $("#dealerTipBtn").disabled = !mySeat || activeHand;
@@ -1142,13 +1180,17 @@ function renderWagerControls(snapshot, mySeat, isMyTurn, activeHand) {
   range.max = max;
   range.step = 1;
   range.value = current;
+  updateRangeFill(range);
   input.min = min;
   input.max = max;
   input.value = current;
   range.disabled = !canAdjust;
   input.disabled = !canAdjust;
+  const callAmount = mySeat ? Math.max(0, snapshot.game.currentBet - mySeat.bet) : 0;
   $("#wagerHint").textContent = mySeat
-    ? `最小 ${min} · 最大 ${max} · 剩余 ${mySeat.chips}`
+    ? callAmount > 0
+      ? `跟注 ${callAmount} · 最小加注到 ${min} · 最大全下到 ${max} · 剩余 ${mySeat.chips}`
+      : `最小下注 ${min} · 最大全下 ${max} · 剩余 ${mySeat.chips}`
     : "入座后可调整下注";
   $("#wagerMode").textContent = snapshot.game.currentBet > 0 ? "加注到" : "下注额";
   updateAmountValue(current);
@@ -1320,6 +1362,7 @@ function renderSettlement(game) {
         <strong>${escapeHtml(winner.username)} +${winner.amount}</strong>
         <em>${escapeHtml(winner.hand || "")}</em>
       </div>
+      ${winner.bestCards?.length ? `<div class="settlementBestCards">${winner.bestCards.map(cardHtml).join("")}</div>` : ""}
     `).join("")}
   `;
   panel.classList.remove("hidden");
@@ -1358,7 +1401,7 @@ function animatePotToWinners(winners) {
   playChipSound(0.5);
   const impact = settlementImpact(winners);
   winners.forEach((winner, winnerIndex) => {
-    const target = Number.isInteger(winner.seat) ? document.querySelector(`[data-seat="${winner.seat}"]`) : null;
+    const target = winnerTarget(winner);
     if (!target) return;
     const targetRect = target.getBoundingClientRect();
     const chips = Math.min(24, Math.max(5 + impact.tier * 2, Math.ceil(Number(winner.amount || 0) / 16)));
@@ -1379,10 +1422,39 @@ function animatePotToWinners(winners) {
       setTimeout(() => chip.remove(), 1500 + winnerIndex * 200 + i * 60);
     }
     setTimeout(() => {
-      target.classList.add("winnerPulse", `winnerTier${impact.tier}`);
-      setTimeout(() => target.classList.remove("winnerPulse", `winnerTier${impact.tier}`), 1000 + impact.tier * 160);
+      target.classList.add("winnerAvatarPulse", `winnerTier${impact.tier}`);
+      burstOnWinnerAvatar(target, impact.tier, winnerIndex);
+      setTimeout(() => target.classList.remove("winnerAvatarPulse", `winnerTier${impact.tier}`), 1000 + impact.tier * 180);
     }, winnerIndex * 220 + 520);
   });
+}
+
+function winnerTarget(winner) {
+  const seat = Number.isInteger(winner.seat) ? document.querySelector(`[data-seat="${winner.seat}"]`) : null;
+  return seat?.querySelector(".seatAvatar") || seat;
+}
+
+function burstOnWinnerAvatar(target, tier, winnerIndex = 0) {
+  const host = roomView;
+  if (!target || !host) return;
+  const base = host.getBoundingClientRect();
+  const rect = target.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2 - base.left;
+  const centerY = rect.top + rect.height / 2 - base.top;
+  const count = 16 + tier * 10;
+  for (let i = 0; i < count; i += 1) {
+    const particle = document.createElement("span");
+    particle.className = `avatarPrizeBurst avatarPrizeBurstTier${tier}`;
+    const angle = (Math.PI * 2 * i) / count;
+    const radius = 42 + tier * 16 + Math.random() * (24 + tier * 10);
+    particle.style.left = `${centerX}px`;
+    particle.style.top = `${centerY}px`;
+    particle.style.setProperty("--x", `${Math.cos(angle) * radius}px`);
+    particle.style.setProperty("--y", `${Math.sin(angle) * radius}px`);
+    particle.style.setProperty("--delay", `${winnerIndex * 0.08 + Math.random() * 0.12}s`);
+    host.appendChild(particle);
+    setTimeout(() => particle.remove(), 1400 + tier * 150);
+  }
 }
 
 function handPowerFromWinner(winner) {
@@ -1409,6 +1481,7 @@ function animateHandCelebration(winners) {
     <div class="celebrationTitle">
       <strong>${escapeHtml(best.winner.hand || "赢得底池")}</strong>
       <span>${escapeHtml(best.winner.username || "")} +${escapeHtml(best.winner.amount || "")}</span>
+      ${best.winner.bestCards?.length ? `<div class="celebrationCards">${best.winner.bestCards.map(cardHtml).join("")}</div>` : ""}
     </div>
   `;
   for (let i = 0; i < burstCount; i += 1) {

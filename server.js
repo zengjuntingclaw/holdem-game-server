@@ -2040,6 +2040,7 @@ function showdown(room) {
         username: player.username,
         amount,
         hand: result.name,
+        bestCards: result.cards || [],
         pot: pot.name
       });
     }
@@ -2107,6 +2108,21 @@ function rankValue(card) {
   return "23456789TJQKA".indexOf(card[0]) + 2;
 }
 
+function cardsWithRanks(cards, ranks, suit = null) {
+  const pool = cards.filter((card) => suit === null || card[1] === suit);
+  return ranks.map((rank) => {
+    const wanted = rank === 1 ? 14 : rank;
+    const index = pool.findIndex((card) => rankValue(card) === wanted);
+    if (index === -1) return "";
+    const [card] = pool.splice(index, 1);
+    return card;
+  }).filter(Boolean);
+}
+
+function straightRanks(high) {
+  return high === 5 ? [5, 4, 3, 2, 1] : [high, high - 1, high - 2, high - 3, high - 4];
+}
+
 function evaluateSeven(cards) {
   const byRank = new Map();
   const bySuit = new Map();
@@ -2119,41 +2135,56 @@ function evaluateSeven(cards) {
   }
   const ranksDesc = [...byRank.keys()].sort((a, b) => b - a);
   const counts = [...byRank.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0]);
-  const flushRanks = [...bySuit.values()].find((items) => items.length >= 5)?.sort((a, b) => b - a) || null;
+  const flushEntry = [...bySuit.entries()].find(([, items]) => items.length >= 5) || null;
+  const flushSuit = flushEntry?.[0] || null;
+  const flushRanks = flushEntry?.[1]?.sort((a, b) => b - a) || null;
   const straightHigh = findStraightHigh(ranksDesc);
   const straightFlushHigh = flushRanks ? findStraightHigh([...new Set(flushRanks)]) : 0;
 
-  if (straightFlushHigh) return namedScore("同花顺", [8, straightFlushHigh]);
+  if (straightFlushHigh) {
+    const bestRanks = straightRanks(straightFlushHigh);
+    return namedScore("同花顺", [8, straightFlushHigh], cardsWithRanks(cards, bestRanks, flushSuit));
+  }
 
   const quad = counts.find(([, count]) => count === 4);
   if (quad) {
     const kicker = ranksDesc.find((rank) => rank !== quad[0]);
-    return namedScore("四条", [7, quad[0], kicker]);
+    return namedScore("四条", [7, quad[0], kicker], cardsWithRanks(cards, [quad[0], quad[0], quad[0], quad[0], kicker]));
   }
 
   const trips = counts.filter(([, count]) => count === 3).map(([rank]) => rank);
   const pairs = counts.filter(([, count]) => count === 2).map(([rank]) => rank);
   if (trips.length && (pairs.length || trips.length > 1)) {
-    return namedScore("葫芦", [6, trips[0], trips.length > 1 ? trips[1] : pairs[0]]);
+    const pairRank = trips.length > 1 ? trips[1] : pairs[0];
+    return namedScore("葫芦", [6, trips[0], pairRank], cardsWithRanks(cards, [trips[0], trips[0], trips[0], pairRank, pairRank]));
   }
 
-  if (flushRanks) return namedScore("同花", [5, ...flushRanks.slice(0, 5)]);
-  if (straightHigh) return namedScore("顺子", [4, straightHigh]);
+  if (flushRanks) {
+    const bestRanks = flushRanks.slice(0, 5);
+    return namedScore("同花", [5, ...bestRanks], cardsWithRanks(cards, bestRanks, flushSuit));
+  }
+  if (straightHigh) {
+    const bestRanks = straightRanks(straightHigh);
+    return namedScore("顺子", [4, straightHigh], cardsWithRanks(cards, bestRanks));
+  }
   if (trips.length) {
-    return namedScore("三条", [3, trips[0], ...ranksDesc.filter((rank) => rank !== trips[0]).slice(0, 2)]);
+    const kickers = ranksDesc.filter((rank) => rank !== trips[0]).slice(0, 2);
+    return namedScore("三条", [3, trips[0], ...kickers], cardsWithRanks(cards, [trips[0], trips[0], trips[0], ...kickers]));
   }
   if (pairs.length >= 2) {
     const kicker = ranksDesc.find((rank) => rank !== pairs[0] && rank !== pairs[1]);
-    return namedScore("两对", [2, pairs[0], pairs[1], kicker]);
+    return namedScore("两对", [2, pairs[0], pairs[1], kicker], cardsWithRanks(cards, [pairs[0], pairs[0], pairs[1], pairs[1], kicker]));
   }
   if (pairs.length === 1) {
-    return namedScore("一对", [1, pairs[0], ...ranksDesc.filter((rank) => rank !== pairs[0]).slice(0, 3)]);
+    const kickers = ranksDesc.filter((rank) => rank !== pairs[0]).slice(0, 3);
+    return namedScore("一对", [1, pairs[0], ...kickers], cardsWithRanks(cards, [pairs[0], pairs[0], ...kickers]));
   }
-  return namedScore("高牌", [0, ...ranksDesc.slice(0, 5)]);
+  const highCards = ranksDesc.slice(0, 5);
+  return namedScore("高牌", [0, ...highCards], cardsWithRanks(cards, highCards));
 }
 
-function namedScore(name, score) {
-  return { name, score };
+function namedScore(name, score, cards = []) {
+  return { name, score, cards };
 }
 
 function findStraightHigh(ranks) {
