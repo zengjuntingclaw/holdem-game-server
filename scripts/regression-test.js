@@ -441,8 +441,9 @@ async function main() {
   assert.equal(showdown.game.status, "showdown");
   assert.equal(showdown.game.pot, 0);
   assert.equal(showdown.game.board.length, 5);
-  assert.ok(showdown.game.nextHandStartsAt > showdown.game.serverNow);
-  assert.ok(showdown.seats.filter((seat) => seat?.chips > 0).every((seat) => seat.ready));
+  assert.equal(showdown.game.nextHandStartsAt, 0);
+  assert.ok(showdown.seats.filter((seat) => seat?.chips > 0 && seat.connected).every((seat) => seat.ready));
+  assert.ok(showdown.seats.filter((seat) => seat && !seat.connected).every((seat) => !seat.ready));
   assert.ok(showdown.game.winners.length >= 1);
   assert.match(showdown.game.fairness.seed, /^[a-f0-9]{64}$/);
   assert.equal(showdown.game.fairness.deck.length, 52);
@@ -453,7 +454,7 @@ async function main() {
   }
   await expectApiError(`/api/records/rooms/${roomId}?actions=1000&hands=200`, 404, { token: users[0].token });
   log("测试牌局不会写入训练流水");
-  log("下注轮转、发公共牌、摊牌、奖池归零、筹码守恒和公平证明公开正常");
+  log("下注轮转、摊牌、筹码守恒和公平证明正常；有离线玩家时不会自动开下一手");
 
   const autoTexts = clients[0].messages
     .filter((message) => message.type === "roomState")
@@ -462,6 +463,12 @@ async function main() {
   assert.equal(showdown.seats[1].folded, true);
   assert.ok(autoTexts.some((text) => text.includes("离线自动")));
   log("预设弃牌和离线自动不加注都已执行");
+
+  const cleanupWaitMs = Number(process.env.EXPECT_DISCONNECT_CLEANUP_MS || 0);
+  if (cleanupWaitMs > 0) {
+    await waitForRoom(clients[0], (message) => !message.seats[2], "disconnected seat cleanup", cleanupWaitMs);
+    log("断线宽限期结束后会自动释放座位");
+  }
 
   clients[1].socket.close();
   await new Promise((resolve) => setTimeout(resolve, 200));

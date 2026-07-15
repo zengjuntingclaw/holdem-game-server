@@ -847,14 +847,14 @@ p {
 .settlementPanel {
   position: absolute;
   left: 50%;
-  top: 58%;
-  z-index: 17;
-  width: min(430px, 74vw);
+  top: 59%;
+  z-index: 40;
+  width: min(420px, 74vw);
   transform: translateX(-50%) translateZ(50px) rotateX(var(--counter-tilt));
   border: 1px solid rgb(215 184 90 / 40%);
   border-radius: 10px;
   background: rgb(10 24 28 / 86%);
-  padding: 14px;
+  padding: 5px;
   box-shadow: 0 18px 42px rgb(0 0 0 / 35%);
 }
 
@@ -872,9 +872,9 @@ p {
 }
 
 .settlementTitle {
-  margin-bottom: 8px;
+  margin-bottom: 1px;
   color: #ffe08a;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 900;
 }
 
@@ -883,9 +883,9 @@ p {
   grid-template-columns: 72px 1fr auto;
   gap: 8px;
   align-items: center;
-  padding: 6px 0;
+  padding: 2px 0;
   border-top: 1px solid rgb(255 255 255 / 10%);
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .settlementRow strong {
@@ -897,20 +897,52 @@ p {
   font-style: normal;
 }
 
+.settlementWinner.primaryWinner .settlementRow strong,
+.settlementWinner.primaryWinner .settlementRow em {
+  color: #ffe08a;
+}
+
 .settlementBestCards {
   display: flex;
   gap: 5px;
   align-items: center;
-  padding: 2px 0 8px 80px;
+  padding: 2px 0 0 80px;
+}
+
+.settlementBestLabel {
+  flex: 0 0 auto;
+  color: #ffe08a;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .settlementBestCards .card {
-  width: 34px;
-  height: 46px;
+  width: 42px;
+  height: 54px;
+  border-color: rgb(255 255 255 / 78%);
   font-size: 15px;
   animation: none;
   opacity: 1;
   transform: none;
+  box-shadow: 0 5px 12px rgb(0 0 0 / 42%);
+}
+
+.settlementBestCards .cardRank {
+  font-size: 22px;
+}
+
+.settlementBestCards .cardSuit {
+  font-size: 19px;
+}
+
+.settlementWinner.primaryWinner .settlementBestCards .card {
+  border-color: #ffe08a;
+  box-shadow:
+    0 0 0 2px rgb(255 224 138 / 30%),
+    0 8px 18px rgb(0 0 0 / 52%),
+    0 0 20px rgb(255 224 138 / 24%);
+  transform: translateY(-2px);
 }
 
 .celebrationOverlay {
@@ -2435,7 +2467,8 @@ p {
     transform: translateX(calc(100% - 42px));
   }
 
-  .spectatorsDrawer {
+  .spectatorsDrawer,
+  .chatDrawer {
     width: min(280px, calc(100vw - 42px));
     transform: translateX(calc(-100% + 42px));
   }
@@ -2451,7 +2484,8 @@ p {
     padding: 16px;
   }
 
-  .spectatorsDrawerPanel {
+  .spectatorsDrawerPanel,
+  .chatDrawerPanel {
     margin-right: 42px;
     margin-left: 0;
   }
@@ -2664,5 +2698,1058 @@ p {
   100% {
     opacity: 0;
     transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) scale(0.9);
+  }
+}
+
+/* Compact one-screen table layout. */
+body.room-active {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.room-active .shell {
+  width: min(1600px, 100vw);
+  height: 100dvh;
+  padding: 6px 10px 8px;
+}
+
+.room-active .app {
+  display: grid;
+  grid-template-rows: 44px minmax(0, 1fr);
+  height: 100%;
+}
+
+.room-active .topbar {
+  min-height: 0;
+  padding: 0 6px;
+}
+
+#roomView:not(.hidden) {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 54px minmax(300px, 1fr) auto;
+}
+
+.room-active .tableHead {
+  min-height: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.room-active .tableHead > div {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0 10px;
+  align-items: center;
+  text-align: right;
+}
+
+.room-active .tableHead h2 {
+  grid-column: 1 / -1;
+  font-size: 17px;
+}
+
+.room-active .tableHead p,
+.room-active .roomIdPill {
+  margin: 0;
+  font-size: 11px;
+}
+
+.room-active .tableSurface {
+  width: min(1260px, calc(100vw - 28px));
+  height: 100%;
+  min-height: 300px;
+  margin: 0 auto;
+  border-width: 10px;
+  border-radius: 48% / 43%;
+  padding: 10px;
+  transform: none;
+}
+
+.room-active .tableSurface::before,
+.room-active .tableSurface::after {
+  transform: none;
+}
+
+.room-active .boardLine {
+  top: 49%;
+  width: min(600px, 55vw);
+  min-height: 130px;
+  gap: 18px;
+  padding: 14px 20px;
+  transform: translate(-50%, -50%);
+}
+
+.room-active .tableSurface.showdown .boardLine,
+.room-active .tableSurface.showdown .seat {
+  z-index: 45;
+}
+
+.room-active .tableSurface.showdown .seat.winner {
+  z-index: 48;
+  border-color: #ffe08a;
+  box-shadow:
+    0 0 0 3px rgb(255 224 138 / 26%),
+    0 16px 34px rgb(0 0 0 / 42%);
+}
+
+.room-active .tableSurface.showdown .seat .cards,
+.room-active .tableSurface.showdown .boardLine .cards {
+  position: relative;
+  z-index: 2;
+}
+
+.room-active .tableSurface.showdown .seat .card,
+.room-active .tableSurface.showdown .boardLine .card {
+  opacity: 1;
+  filter: none;
+  border-color: rgb(255 255 255 / 76%);
+  box-shadow: 0 6px 14px rgb(0 0 0 / 46%);
+}
+
+.room-active .tableSurface.showdown .seat .hint {
+  color: #f3f8f5;
+  font-weight: 900;
+  opacity: 1;
+}
+
+.room-active .tableSurface.showdown .seat.winner .hint {
+  color: #ffe08a;
+}
+
+.room-active .boardLine > div:first-child {
+  display: grid;
+  justify-items: center;
+}
+
+.room-active .label,
+.room-active .pot span {
+  margin-bottom: 3px;
+  font-size: 12px;
+}
+
+.room-active .boardLine .cards {
+  min-height: 66px;
+  gap: 6px;
+}
+
+.room-active .boardLine .card {
+  width: clamp(48px, 4.8vw, 70px);
+}
+
+.room-active .boardLine .cardRank {
+  font-size: clamp(23px, 2.7vw, 34px);
+}
+
+.room-active .boardLine .cardSuit {
+  font-size: clamp(21px, 2.5vw, 31px);
+}
+
+.room-active .pot {
+  min-width: 76px;
+  padding: 8px 12px;
+}
+
+.room-active .pot strong {
+  font-size: 30px;
+}
+
+.room-active .dealerSpot {
+  width: 58px;
+  min-width: 58px;
+  min-height: 58px;
+}
+
+.room-active .tableStartBtn {
+  top: calc(49% + 78px);
+  min-width: 138px;
+  min-height: 34px;
+  transform: translateX(-50%);
+}
+
+.room-active .seat {
+  width: clamp(142px, 14vw, 190px);
+  min-height: 76px;
+  grid-template-columns: 52px 1fr;
+  gap: 7px;
+  padding: 7px;
+  border-radius: 8px;
+  transform: translate(-50%, -50%);
+}
+
+.room-active .seat:hover {
+  transform: translate(-50%, -50%) scale(1.03);
+}
+
+.room-active .seatAvatar {
+  width: 52px;
+}
+
+.room-active .seatBody {
+  gap: 3px;
+}
+
+.room-active .seatName {
+  max-width: 86px;
+  font-size: 12px;
+}
+
+.room-active .stack,
+.room-active .badge,
+.room-active .seat .hint {
+  font-size: 9px;
+}
+
+.room-active .badge {
+  padding: 1px 4px;
+}
+
+.room-active .seat .cards {
+  gap: 4px;
+}
+
+.room-active .seat .card {
+  width: 39px;
+}
+
+.room-active .seat .cardRank {
+  font-size: 19px;
+}
+
+.room-active .seat .cardSuit {
+  font-size: 17px;
+}
+
+.room-active .seat.empty {
+  width: 66px;
+  min-height: 34px;
+}
+
+.room-active .seat.empty button {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
+.room-active .playbar {
+  margin-top: 6px;
+  padding: 8px 10px;
+  grid-template-columns: minmax(130px, 0.65fr) 3fr;
+  gap: 8px;
+}
+
+.room-active .turn {
+  font-size: 14px;
+}
+
+.room-active #lastAction {
+  max-height: 42px;
+  overflow: hidden;
+  font-size: 10px;
+}
+
+.room-active .actions {
+  grid-template-columns: auto minmax(260px, 1fr) auto;
+  gap: 7px;
+}
+
+.room-active .wagerPanel {
+  min-width: 0;
+  gap: 5px;
+  padding: 7px;
+}
+
+.room-active .wagerHeader {
+  grid-template-columns: auto 1fr 72px;
+  gap: 7px;
+}
+
+.room-active .wagerHeader strong {
+  font-size: 20px;
+}
+
+.room-active .wagerHeader input,
+.room-active .quickBets button {
+  min-height: 30px;
+  font-size: 11px;
+}
+
+.room-active .amountRange {
+  min-height: 24px;
+}
+
+.room-active .wagerHint {
+  font-size: 10px;
+}
+
+.room-active .seatActionCluster,
+.room-active .actionButtons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.room-active .actionButtons {
+  grid-template-columns: repeat(2, minmax(72px, 1fr));
+}
+
+.room-active .seatActionCluster button,
+.room-active .actionButtons button {
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.room-active .presetControls {
+  grid-column: 2 / 4;
+  margin-top: 0;
+}
+
+.room-active .sideToggle {
+  top: auto;
+  bottom: 218px;
+  width: 70px;
+  min-height: 34px;
+  writing-mode: horizontal-tb;
+  border-radius: 6px 6px 0 0;
+  font-size: 11px;
+}
+
+.room-active .spectatorsDrawer .sideToggle {
+  right: -22px;
+}
+
+.room-active .chatDrawer .sideToggle {
+  right: -96px;
+}
+
+.room-active .rulesDrawer .sideToggle {
+  left: -22px;
+}
+
+.room-active .feedbackDrawer .sideToggle {
+  left: -96px;
+}
+
+.winnerCelebration {
+  inset: auto;
+  width: 0;
+  height: 0;
+  overflow: visible;
+}
+
+.winnerCelebration::before {
+  left: 50%;
+  top: 0;
+  transform: translate(-50%, -50%);
+}
+
+.winnerCelebration .celebrationTitle {
+  position: absolute;
+  left: 50%;
+  bottom: 44px;
+  min-width: 190px;
+  padding: 10px 14px;
+  transform: translateX(-50%);
+}
+
+.winnerCelebration .celebrationRing,
+.winnerCelebration .sparkParticle,
+.winnerCelebration .fireworkParticle {
+  left: 0;
+  top: 0;
+}
+
+@media (max-width: 860px) {
+  .room-active .shell {
+    width: 100vw;
+    padding: 3px 4px 5px;
+  }
+
+  .room-active .app {
+    grid-template-rows: 34px minmax(0, 1fr);
+  }
+
+  .room-active .topbar {
+    flex-direction: row;
+    align-items: center;
+    font-size: 11px;
+  }
+
+  .room-active .topActions {
+    gap: 3px;
+    justify-content: flex-end;
+  }
+
+  .room-active .topActions button {
+    min-height: 28px;
+    min-width: 0;
+    padding: 0 7px;
+    font-size: 10px;
+  }
+
+  #roomView:not(.hidden) {
+    grid-template-rows: 40px minmax(260px, 1fr) 164px;
+  }
+
+  .room-active .tableHead {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .room-active .tableHead > div {
+    grid-template-columns: 1fr auto;
+    min-width: 0;
+  }
+
+  .room-active .tableHead h2 {
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+
+  .room-active .tableHead p,
+  .room-active .roomIdPill {
+    min-height: 22px;
+    padding: 0 5px;
+    font-size: 8px;
+  }
+
+  .room-active .tableHead > button {
+    min-height: 28px;
+    padding: 0 7px;
+    font-size: 10px;
+  }
+
+  .room-active .tableSurface {
+    width: calc(100vw - 8px);
+    min-height: 0;
+    border-width: 6px;
+    border-radius: 44% / 40%;
+  }
+
+  .room-active .boardLine {
+    top: 47%;
+    width: 70vw;
+    min-height: 96px;
+    flex-direction: row;
+    gap: 6px;
+    padding: 7px;
+  }
+
+  .room-active .boardLine .cards {
+    min-height: 42px;
+    flex-wrap: nowrap;
+    gap: 2px;
+  }
+
+  .room-active .boardLine .card {
+    width: clamp(33px, 8.5vw, 40px);
+  }
+
+  .room-active .boardLine .cardRank {
+    font-size: 20px;
+  }
+
+  .room-active .boardLine .cardSuit {
+    font-size: 18px;
+  }
+
+  .room-active .pot {
+    min-width: 42px;
+    padding: 4px;
+  }
+
+  .room-active .pot strong {
+    font-size: 20px;
+  }
+
+  .room-active .dealerSpot {
+    width: 38px;
+    min-width: 38px;
+    min-height: 38px;
+  }
+
+  .room-active .tableStartBtn {
+    top: calc(47% + 58px);
+    min-width: 108px;
+    min-height: 28px;
+    font-size: 10px;
+  }
+
+  .room-active .seat {
+    width: clamp(102px, 27vw, 112px);
+    min-height: 54px;
+    grid-template-columns: 30px 1fr;
+    gap: 3px;
+    padding: 3px;
+    border-radius: 6px;
+  }
+
+  .room-active .seatAvatar {
+    width: 30px;
+  }
+
+  .room-active .seatName {
+    max-width: 62px;
+    font-size: 10px;
+  }
+
+  .room-active .stack,
+  .room-active .badge,
+  .room-active .seat .hint {
+    font-size: 8px;
+  }
+
+  .room-active .badges {
+    gap: 1px;
+  }
+
+  .room-active .seat .card {
+    width: 29px;
+  }
+
+  .room-active .seat .cardRank {
+    font-size: 16px;
+  }
+
+  .room-active .seat .cardSuit {
+    font-size: 15px;
+  }
+
+  .room-active .seat.empty {
+    width: 46px;
+    min-height: 26px;
+  }
+
+  .room-active .seat.empty button {
+    min-height: 22px;
+    padding: 0 5px;
+    font-size: 8px;
+  }
+
+  .room-active .turnCountdown {
+    min-width: 52px;
+    padding: 3px 5px;
+  }
+
+  .room-active .turnCountdown span {
+    font-size: 9px;
+  }
+
+  .room-active .turnCountdown strong {
+    font-size: 20px;
+  }
+
+  .room-active .settlementPanel {
+    top: 62%;
+    width: min(370px, 55vw);
+    max-height: 140px;
+    overflow: hidden;
+    padding: 7px;
+    transform: translate(-50%, -50%);
+  }
+
+  .room-active .settlementBestCards {
+    padding-left: 54px;
+  }
+
+  .room-active .settlementBestCards .card {
+    width: 38px;
+    height: 52px;
+  }
+
+  .room-active .settlementBestCards .cardRank {
+    font-size: 20px;
+  }
+
+  .room-active .settlementBestCards .cardSuit {
+    font-size: 18px;
+  }
+
+  .room-active .playbar {
+    margin-top: 3px;
+    padding: 4px;
+    grid-template-columns: 1fr;
+    gap: 3px;
+    overflow: hidden;
+  }
+
+  .room-active .playbar > div:first-child {
+    display: flex;
+    gap: 8px;
+    min-height: 16px;
+  }
+
+  .room-active #lastAction {
+    flex: 1;
+    max-height: 16px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .room-active .actions {
+    grid-template-columns: 0.85fr 1.7fr 1.2fr;
+    gap: 3px;
+  }
+
+  .room-active .seatActionCluster,
+  .room-active .actionButtons {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  .room-active .actionButtons {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .room-active .seatActionCluster button,
+  .room-active .actionButtons button {
+    min-height: 29px;
+    padding: 0 3px;
+    font-size: 9px;
+  }
+
+  .room-active .wagerPanel {
+    padding: 4px;
+  }
+
+  .room-active .wagerHeader {
+    grid-template-columns: auto 1fr 52px;
+  }
+
+  .room-active .wagerHeader span,
+  .room-active .wagerHint {
+    font-size: 8px;
+  }
+
+  .room-active .wagerHeader strong {
+    font-size: 15px;
+  }
+
+  .room-active .wagerHeader input,
+  .room-active .quickBets button {
+    min-height: 24px;
+    padding: 0 2px;
+    font-size: 8px;
+  }
+
+  .room-active .amountRange {
+    min-height: 20px;
+  }
+
+  .room-active .quickBets {
+    gap: 2px;
+  }
+
+  .room-active .presetControls {
+    display: none;
+  }
+
+  .room-active .sideToggle {
+    bottom: 169px;
+    width: 64px;
+    min-height: 32px;
+    font-size: 10px;
+  }
+
+  .room-active .spectatorsDrawer .sideToggle {
+    right: -22px;
+  }
+
+  .room-active .chatDrawer .sideToggle {
+    right: -90px;
+  }
+
+  .room-active .rulesDrawer .sideToggle {
+    left: -22px;
+  }
+
+  .room-active .feedbackDrawer .sideToggle {
+    left: -90px;
+  }
+
+  .winnerCelebration .celebrationTitle {
+    bottom: 30px;
+    min-width: 150px;
+    padding: 7px 9px;
+  }
+
+  .winnerCelebration .celebrationTitle strong {
+    font-size: 18px;
+  }
+
+  .winnerCelebration .celebrationTitle span {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 430px) {
+  .room-active .seat {
+    width: 95px;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .room-active .seatAvatar {
+    width: 24px;
+  }
+
+  .room-active .settlementPanel {
+    width: 190px;
+    max-height: 100px;
+    padding: 5px;
+  }
+
+  .room-active .settlementTitle {
+    margin-bottom: 2px;
+    font-size: 11px;
+  }
+
+  .room-active .settlementRow {
+    grid-template-columns: 48px 1fr auto;
+    gap: 3px;
+    padding: 2px 0;
+    font-size: 9px;
+  }
+
+  .room-active .settlementBestCards {
+    gap: 2px;
+    padding: 2px 0 0;
+  }
+
+  .room-active .settlementBestLabel {
+    font-size: 8px;
+  }
+
+  .room-active .settlementBestCards .card {
+    width: 28px;
+    height: 40px;
+  }
+
+  .room-active .settlementBestCards .cardRank {
+    font-size: 16px;
+  }
+
+  .room-active .settlementBestCards .cardSuit {
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 861px) and (max-height: 780px) {
+  .room-active .tableSurface.showdown .boardLine {
+    top: 46%;
+  }
+
+  .room-active .settlementPanel {
+    top: 60%;
+    width: 420px;
+    max-height: 48px;
+    padding: 3px 5px;
+    overflow: hidden;
+  }
+
+  .room-active .settlementTitle {
+    display: none;
+  }
+
+  .room-active .settlementWinner {
+    display: grid;
+    grid-template-columns: 140px minmax(0, 1fr);
+    gap: 5px;
+    align-items: center;
+  }
+
+  .room-active .settlementRow {
+    grid-template-columns: 28px 1fr auto;
+    gap: 3px;
+    padding: 0;
+    border: 0;
+    font-size: 9px;
+  }
+
+  .room-active .settlementBestCards {
+    gap: 2px;
+    padding: 0;
+  }
+
+  .room-active .settlementBestLabel {
+    font-size: 8px;
+  }
+
+  .room-active .settlementBestCards .card {
+    width: 28px;
+    height: 40px;
+  }
+
+  .room-active .settlementBestCards .cardRank {
+    font-size: 16px;
+  }
+
+  .room-active .settlementBestCards .cardSuit {
+    font-size: 14px;
+  }
+
+  .room-active .seat {
+    width: 168px;
+    min-height: 72px;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 5px;
+    padding: 5px;
+  }
+
+  .room-active .seatAvatar {
+    width: 44px;
+  }
+
+  .room-active .seatBody {
+    gap: 1px;
+  }
+
+  .room-active .seat .cards {
+    gap: 3px;
+  }
+
+  .room-active .seat .card {
+    width: 36px;
+  }
+
+  .room-active .seat .cardRank {
+    font-size: 18px;
+  }
+
+  .room-active .seat .cardSuit {
+    font-size: 16px;
+  }
+
+  .room-active .seat .badges {
+    display: none;
+  }
+
+  .room-active .seat .hint {
+    margin: 0;
+    font-size: 8px;
+    line-height: 1;
+  }
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .room-active .app {
+    grid-template-rows: 28px minmax(0, 1fr);
+  }
+
+  .room-active .topbar,
+  .room-active .topActions button {
+    min-height: 24px;
+  }
+
+  #roomView:not(.hidden) {
+    grid-template-rows: 28px minmax(140px, 1fr) 106px;
+  }
+
+  .room-active .tableHead h2 {
+    font-size: 10px;
+  }
+
+  .room-active .tableHead p,
+  .room-active .roomIdPill,
+  .room-active .tableHead > button {
+    min-height: 22px;
+    font-size: 8px;
+  }
+
+  .room-active .tableSurface {
+    border-width: 5px;
+  }
+
+  .room-active .boardLine {
+    min-height: 66px;
+    padding: 4px 7px;
+  }
+
+  .room-active .tableSurface.showdown .boardLine {
+    top: 36%;
+  }
+
+  .room-active .boardLine .card {
+    width: 28px;
+  }
+
+  .room-active .boardLine .cardRank {
+    font-size: 16px;
+  }
+
+  .room-active .boardLine .cardSuit {
+    font-size: 14px;
+  }
+
+  .room-active .dealerSpot {
+    width: 34px;
+    min-width: 34px;
+    min-height: 34px;
+  }
+
+  .room-active .tableStartBtn {
+    top: calc(47% + 43px);
+  }
+
+  .room-active .settlementPanel {
+    top: 62%;
+    width: min(250px, 32vw);
+    max-height: 52px;
+    padding: 4px 6px;
+    transform: translate(-50%, -50%);
+  }
+
+  .room-active .settlementTitle,
+  .room-active .settlementRow {
+    display: none;
+  }
+
+  .room-active .settlementBestCards {
+    justify-content: center;
+    gap: 2px;
+    padding: 0;
+  }
+
+  .room-active .settlementBestLabel {
+    font-size: 9px;
+  }
+
+  .room-active .settlementBestCards .card {
+    width: 30px;
+    height: 42px;
+  }
+
+  .room-active .settlementBestCards .cardRank {
+    font-size: 14px;
+  }
+
+  .room-active .settlementBestCards .cardSuit {
+    font-size: 14px;
+  }
+
+  .room-active .seat {
+    width: 92px;
+    min-height: 52px;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 2px;
+    padding: 3px;
+  }
+
+  .room-active .seatAvatar {
+    width: 24px;
+  }
+
+  .room-active .seatBody,
+  .room-active .seat .cards {
+    gap: 0;
+  }
+
+  .room-active .seat .card {
+    width: 27px;
+  }
+
+  .room-active .seat .cardRank {
+    font-size: 15px;
+  }
+
+  .room-active .seat .cardSuit {
+    font-size: 14px;
+  }
+
+  .room-active .seatTop {
+    line-height: 1;
+  }
+
+  .room-active .seat .chipIcon {
+    width: 10px;
+    margin-right: 2px;
+    border-width: 1px;
+  }
+
+  .room-active .seat .badges,
+  .room-active .seat:not(.showdownSeat) .hint {
+    display: none;
+  }
+
+  .room-active .seat.showdownSeat .hint {
+    position: absolute;
+    left: 3px;
+    bottom: 3px;
+    z-index: 3;
+    display: block;
+    width: 24px;
+    padding: 2px 1px;
+    overflow: hidden;
+    border-radius: 3px;
+    background: rgb(5 16 21 / 86%);
+    font-size: 7px;
+    line-height: 1;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .room-active .playbar {
+    height: 103px;
+    grid-template-columns: 112px minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .room-active .playbar > div:first-child {
+    display: block;
+  }
+
+  .room-active #lastAction {
+    max-height: 62px;
+    white-space: normal;
+  }
+
+  .room-active .actions {
+    grid-template-columns: auto minmax(250px, 1fr) auto;
+    align-items: stretch;
+  }
+
+  .room-active .seatActionCluster {
+    grid-template-columns: 1fr;
+  }
+
+  .room-active .actionButtons {
+    grid-template-columns: repeat(3, minmax(48px, 1fr));
+  }
+
+  .room-active .seatActionCluster button,
+  .room-active .actionButtons button {
+    min-height: 25px;
+    font-size: 8px;
+  }
+
+  .room-active .wagerPanel {
+    gap: 2px;
+  }
+
+  .room-active .wagerHeader input,
+  .room-active .quickBets button {
+    min-height: 21px;
+  }
+
+  .room-active .amountRange {
+    min-height: 16px;
+  }
+
+  .room-active .wagerHint {
+    display: none;
+  }
+
+  .room-active .sideToggle {
+    bottom: 111px;
   }
 }

@@ -31,7 +31,10 @@ const CHAT_COOLDOWN_MS = clampConfigInt(process.env.CHAT_COOLDOWN_MS, 3000, 500,
 const DEALER_TIP_COOLDOWN_MS = clampConfigInt(process.env.DEALER_TIP_COOLDOWN_MS, 2000, 500, 60000);
 const FEEDBACK_COOLDOWN_MS = clampConfigInt(process.env.FEEDBACK_COOLDOWN_MS, 30000, 3000, 300000);
 const AUTO_NEXT_HAND_DELAY_MS = clampConfigInt(process.env.AUTO_NEXT_HAND_DELAY_MS, 6000, 1000, 30000);
+const DISCONNECT_SEAT_GRACE_MS = clampConfigInt(process.env.DISCONNECT_SEAT_GRACE_MS, 90000, 5000, 30 * 60 * 1000);
 const SESSION_TTL_MS = clampConfigInt(process.env.SESSION_TTL_MS, 30 * 24 * 60 * 60 * 1000, 60 * 60 * 1000, 365 * 24 * 60 * 60 * 1000);
+const MAX_WS_MESSAGE_BYTES = 64 * 1024;
+const MAX_WS_BUFFER_BYTES = 128 * 1024;
 const APP_VERSION = process.env.APP_VERSION || packageInfo.version || "0.1.0";
 const DATA_DIR = path.join(__dirname, "data");
 const DB_FILE = path.join(DATA_DIR, "poker.sqlite");
@@ -74,6 +77,7 @@ const DEALER_BLESSINGS = [
 
 const feedbackChallenges = new Map();
 const feedbackCooldowns = new Map();
+const emailCodeRequestCooldowns = new Map();
 const rooms = new Map();
 const clients = new Set();
 const db = initDatabase();
@@ -240,9 +244,19 @@ function json(res, status, payload, extraHeaders = {}) {
     "content-type": "application/json; charset=utf-8",
     "content-length": Buffer.byteLength(body),
     "cache-control": "no-store",
+    ...securityHeaders(),
     ...extraHeaders
   });
   res.end(body);
+}
+
+function securityHeaders() {
+  return {
+    "content-security-policy": "default-src 'self'; img-src 'self' data:; media-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+    "referrer-policy": "no-referrer",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY"
+  };
 }
 
 function readBody(req) {
@@ -272,6 +286,11 @@ function normalizeUsername(value) {
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function isLoopbackAddress(address) {
+  const value = String(address || "").replace(/^::ffff:/, "");
+  return value === "127.0.0.1" || value === "::1";
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -304,7 +323,8 @@ function authTokenFromRequest(req) {
 
 function sessionCookie(token) {
   const maxAge = Math.floor(SESSION_TTL_MS / 1000);
-  return `pokerToken=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+  const secure = process.env.NODE_ENV === "production" && process.env.COOKIE_SECURE !== "0" ? "; Secure" : "";
+  return `pokerToken=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
 }
 
 function clearSessionCookie() {
@@ -831,7 +851,15 @@ async function handleApi(req, res, url) {
       if (!isValidEmail(email)) {
         return json(res, 400, { error: "邮箱格式不正确" });
       }
+      if (!SMTP_HOST && !isLoopbackAddress(req.socket.remoteAddress)) {
+        return json(res, 503, { error: "邮件服务尚未配置，远程登录已停用" });
+      }
+      const availableAt = emailCodeRequestCooldowns.get(email) || 0;
+      if (availableAt > Date.now()) {
+        return json(res, 429, { error: `请求太频繁，请 ${Math.ceil((availableAt - Date.now()) / 1000)} 秒后再试` });
+      }
       const result = await createAndSendEmailCode(email);
+      emailCodeRequestCooldowns.set(email, Date.now() + 60000);
       return json(res, 200, result);
     }
 
@@ -849,21 +877,6 @@ async function handleApi(req, res, url) {
       const verification = verifyEmailCode(email, code);
       if (!verification.ok) {
         return json(res, 400, { error: verification.error });
-      }
-      const user = upsertCodeLoginUser(email, username);
-      const token = createSession(user.id);
-      return json(res, 200, { token, user: publicUser(user) }, { "set-cookie": sessionCookie(token) });
-    }
-
-    if (req.method === "POST" && url.pathname === "/api/quick-login") {
-      const body = await readBody(req);
-      const email = normalizeEmail(body.email);
-      const username = normalizeUsername(body.username);
-      if (!isValidEmail(email)) {
-        return json(res, 400, { error: "邮箱格式不正确" });
-      }
-      if (username && !/^[\w\u4e00-\u9fa5 -]{2,20}$/.test(username)) {
-        return json(res, 400, { error: "昵称需要 2-20 个字符" });
       }
       const user = upsertCodeLoginUser(email, username);
       const token = createSession(user.id);
@@ -1209,6 +1222,7 @@ function staticHeadersFor(ext, type, size) {
   const isAudio = [".ogg", ".mp3", ".wav"].includes(ext);
   const isVersionedAsset = [".css", ".js", ".png", ".jpg", ".jpeg", ".webp", ".gif"].includes(ext);
   return {
+    ...securityHeaders(),
     "content-type": type,
     "content-length": size,
     "accept-ranges": "bytes",
@@ -1443,6 +1457,7 @@ function createRoom(name, owner, settings = {}) {
     dealerImage: randomDealer(),
     turnTimer: null,
     nextHandTimer: null,
+    disconnectTimers: new Map(),
     chipAnimations: [],
     music: {
       mode: "single",
@@ -1605,8 +1620,37 @@ function clearNextHandTimer(room) {
 
 function autoReadyNextHand(room) {
   for (const player of occupiedSeats(room)) {
-    player.ready = player.chips > 0;
+    player.ready = player.chips > 0 && isUserConnected(player.userId);
   }
+}
+
+function cancelDisconnectedSeatCleanup(room, userId) {
+  const timer = room.disconnectTimers?.get(userId);
+  if (timer) clearTimeout(timer);
+  room.disconnectTimers?.delete(userId);
+}
+
+function scheduleDisconnectedSeatCleanup(room, userId, delayMs = DISCONNECT_SEAT_GRACE_MS) {
+  cancelDisconnectedSeatCleanup(room, userId);
+  const timer = setTimeout(() => {
+    room.disconnectTimers?.delete(userId);
+    if (isUserConnected(userId)) return;
+    if (isHandInProgress(room)) {
+      scheduleDisconnectedSeatCleanup(room, userId, 5000);
+      return;
+    }
+    const seatIndex = room.seats.findIndex((seat) => seat?.userId === userId);
+    if (seatIndex === -1) return;
+    const player = room.seats[seatIndex];
+    markRoomParticipantLeft(room, player);
+    room.seats[seatIndex] = null;
+    room.game.lastAction = `${player.username} 离线超时，已自动离座`;
+    clearNextHandTimer(room);
+    broadcastRoom(room);
+    broadcastLobby();
+  }, delayMs);
+  timer.unref?.();
+  room.disconnectTimers.set(userId, timer);
 }
 
 function scheduleNextHand(room) {
@@ -2478,6 +2522,7 @@ function handleWsMessage(client, message) {
     const room = rooms.get(String(payload.roomId || "").toUpperCase());
     if (!room) throw new Error("房间不存在");
     client.roomId = room.id;
+    cancelDisconnectedSeatCleanup(room, client.user.id);
     sendJson(client, { type: "roomState", ...roomStateFor(room, client.user.id) });
     broadcastRoom(room);
     return;
@@ -2690,6 +2735,16 @@ const server = http.createServer((req, res) => {
 
 server.on("upgrade", (req, socket) => {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+  const origin = String(req.headers.origin || "");
+  if (origin) {
+    try {
+      if (new URL(origin).host !== req.headers.host) throw new Error("origin mismatch");
+    } catch {
+      socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+  }
   const token = url.searchParams.get("token") || authTokenFromRequest(req);
   const userId = getSessionUserId(token);
   const user = getUserById(userId);
@@ -2717,8 +2772,13 @@ server.on("upgrade", (req, socket) => {
 
   socket.on("data", (chunk) => {
     client.buffer = Buffer.concat([client.buffer, chunk]);
+    if (client.buffer.length > MAX_WS_BUFFER_BYTES) {
+      socket.destroy();
+      return;
+    }
     let frame;
-    while ((frame = readFrame(client)) !== null) {
+    try {
+      while ((frame = readFrame(client)) !== null) {
       if (frame.opcode === 8) {
         socket.end();
         break;
@@ -2730,6 +2790,9 @@ server.on("upgrade", (req, socket) => {
           sendJson(client, { type: "error", error: error.message || "操作失败" });
         }
       }
+      }
+    } catch {
+      socket.destroy();
     }
   });
   socket.on("close", () => closeClient(client));
@@ -2742,6 +2805,11 @@ function closeClient(client) {
   clients.delete(client);
   const room = rooms.get(client.roomId);
   if (room) {
+    const player = seatedPlayer(room, client.user.id);
+    if (player && !isUserConnected(client.user.id)) {
+      if (!isHandInProgress(room)) player.ready = false;
+      scheduleDisconnectedSeatCleanup(room, client.user.id);
+    }
     processAutomaticTurns(room);
     scheduleTurnTimer(room);
     broadcastRoom(room);
@@ -2755,6 +2823,7 @@ function readFrame(client) {
   const second = buffer[1];
   const opcode = first & 0x0f;
   const masked = (second & 0x80) !== 0;
+  if (!masked) throw new Error("Client frames must be masked");
   let length = second & 0x7f;
   let offset = 2;
   if (length === 126) {
@@ -2767,6 +2836,9 @@ function readFrame(client) {
     const low = buffer.readUInt32BE(offset + 4);
     length = high * 2 ** 32 + low;
     offset += 8;
+  }
+  if (!Number.isSafeInteger(length) || length > MAX_WS_MESSAGE_BYTES) {
+    throw new Error("WebSocket message too large");
   }
   const maskOffset = masked ? 4 : 0;
   if (buffer.length < offset + maskOffset + length) return null;

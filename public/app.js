@@ -1,7 +1,7 @@
 "use strict";
 
 const $ = (selector) => document.querySelector(selector);
-const CLIENT_VERSION = "0.1.46";
+const CLIENT_VERSION = "0.1.63";
 const DEFAULT_WAGER_AMOUNT = 20;
 const EMOTES = [
   { key: "wellPlayed", text: "打得不错" },
@@ -66,7 +66,11 @@ const lobbyView = $("#lobbyView");
 const roomView = $("#roomView");
 const authError = $("#authError");
 
-$("#codeLoginBtn").addEventListener("click", quickLogin);
+$("#codeLoginBtn").addEventListener("click", codeLogin);
+$("#authForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  codeLogin();
+});
 $("#logoutBtn").addEventListener("click", logout);
 $("#saveProfileBtn").addEventListener("click", saveProfile);
 $("#createRoomBtn").addEventListener("click", createRoom);
@@ -131,6 +135,9 @@ document.addEventListener("keydown", (event) => {
     closeDealerTipMenu();
   }
 });
+const narrowScreenQuery = window.matchMedia("(max-width: 860px)");
+narrowScreenQuery.addEventListener("change", closeSideDrawers);
+window.addEventListener("orientationchange", closeSideDrawers);
 $("#dealerSpot").addEventListener("contextmenu", (event) => {
   event.preventDefault();
   openDealerTipMenu();
@@ -162,18 +169,35 @@ async function boot() {
   }
 }
 
-async function quickLogin() {
+async function codeLogin() {
   authError.textContent = "";
   const email = $("#email").value.trim();
   const username = $("#username").value.trim();
+  const codeInput = $("#verificationCode");
+  const code = codeInput.value.trim();
   if (!email) {
     authError.textContent = "请输入邮箱";
     return;
   }
+  if (code && !/^\d{6}$/.test(code)) {
+    authError.textContent = "验证码需要 6 位数字";
+    return;
+  }
   try {
-    const data = await api("/api/quick-login", {
+    if (!/^\d{6}$/.test(code)) {
+      const requested = await api("/api/email-code/request", {
+        method: "POST",
+        body: JSON.stringify({ email })
+      }, false);
+      if (requested.devCode) codeInput.value = requested.devCode;
+      $("#codeLoginBtn").textContent = "验证码登录";
+      authError.textContent = requested.devCode ? `本机测试验证码：${requested.devCode}` : (requested.message || "验证码已发送");
+      codeInput.focus();
+      return;
+    }
+    const data = await api("/api/email-code/verify", {
       method: "POST",
-      body: JSON.stringify({ email, username })
+      body: JSON.stringify({ email, username, code })
     }, false);
     await enterApp(data);
   } catch (error) {
@@ -601,6 +625,7 @@ function renderProfile() {
 }
 
 function showLobby() {
+  document.body.classList.remove("room-active");
   if (state.roomState) send({ type: "leaveRoom" });
   lobbyView.classList.remove("hidden");
   roomView.classList.add("hidden");
@@ -615,6 +640,7 @@ function showLobby() {
 }
 
 function showRoom() {
+  document.body.classList.add("room-active");
   lobbyView.classList.add("hidden");
   roomView.classList.remove("hidden");
   $("#spectatorsDrawer")?.classList.remove("hidden");
@@ -1075,6 +1101,7 @@ function renderRoom() {
   const snapshot = state.roomState;
   if (!snapshot) return;
   showRoom();
+  $(".tableSurface").classList.toggle("showdown", snapshot.game.status === "showdown");
   $("#roomTitle").textContent = `${snapshot.room.name} #${snapshot.room.id}`;
   $("#handInfo").textContent = `${statusText(snapshot.game.status)} · 第 ${snapshot.game.handNumber} 手 · 盲注 ${snapshot.room.smallBlind}/${snapshot.room.bigBlind}`;
   $("#copyRoomIdBtn").textContent = `房间 ID：${snapshot.room.id}`;
@@ -1247,6 +1274,8 @@ function seatHtml(seat, index, game, mySeat, activeHand, totalSeats) {
     return `<div class="seat empty" data-seat="${index}" style="${posStyle}"><button class="secondary" data-sit="${index}"${disabled}>${label}</button></div>`;
   }
   const classes = ["seat"];
+  if (game.status === "showdown") classes.push("showdownSeat");
+  if (game.status === "showdown" && game.winners?.some((winner) => winner.seat === index)) classes.push("winner");
   if (game.actingSeat === index) classes.push("active");
   if (mySeat?.seat === index) classes.push("mine");
   if (seat.folded) classes.push("folded");
@@ -1372,12 +1401,14 @@ function renderSettlement(game) {
   panel.innerHTML = `
     <div class="settlementTitle">${escapeHtml(impact.title)}</div>
     ${game.winners.map((winner) => `
+      <div class="settlementWinner${winner === impact.bestWinner ? " primaryWinner" : ""}">
       <div class="settlementRow">
         <span>${escapeHtml(winner.pot || "底池")}</span>
         <strong>${escapeHtml(winner.username)} +${winner.amount}</strong>
         <em>${escapeHtml(winner.hand || "")}</em>
       </div>
-      ${winner.bestCards?.length ? `<div class="settlementBestCards">${winner.bestCards.map(cardHtml).join("")}</div>` : ""}
+      ${winner.bestCards?.length ? `<div class="settlementBestCards"><span class="settlementBestLabel">最佳5张</span>${winner.bestCards.map(cardHtml).join("")}</div>` : ""}
+      </div>
     `).join("")}
   `;
   panel.classList.remove("hidden");
@@ -1404,7 +1435,7 @@ function settlementImpact(winners) {
   const handTier = best.power >= 7 ? 4 : best.power >= 5 ? 3 : best.power >= 3 ? 2 : best.power >= 1 ? 1 : 0;
   const tier = Math.min(5, Math.max(amountTier, handTier));
   const title = tier >= 5 ? "爆炸奖池" : tier >= 4 ? "高能结算" : tier >= 3 ? "大牌命中" : tier >= 2 ? "漂亮收池" : "奖池分配";
-  return { tier, title, power: best.power, amount: best.amount, total };
+  return { tier, title, power: best.power, amount: best.amount, total, bestWinner: best.winner };
 }
 
 function animatePotToWinners(winners) {
@@ -1489,7 +1520,13 @@ function animateHandCelebration(winners) {
   const impact = settlementImpact(winners);
   playSettlementSound(power);
   const overlay = document.createElement("div");
-  overlay.className = `celebrationOverlay celebrationPower${Math.min(8, power)} celebrationTier${impact.tier}`;
+  const target = winnerTarget(best.winner);
+  if (!target) return;
+  const base = host.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  overlay.className = `celebrationOverlay winnerCelebration celebrationPower${Math.min(8, power)} celebrationTier${impact.tier}`;
+  overlay.style.left = `${targetRect.left + targetRect.width / 2 - base.left}px`;
+  overlay.style.top = `${targetRect.top - base.top}px`;
   overlay.style.setProperty("--celebration-scale", String(1 + impact.tier * 0.18));
   const burstCount = Math.min(130, (power >= 8 ? 78 : power >= 7 ? 64 : power >= 6 ? 48 : power >= 4 ? 34 : power >= 2 ? 22 : 10) + impact.tier * 10);
   overlay.innerHTML = `
