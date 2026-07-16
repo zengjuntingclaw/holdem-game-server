@@ -4135,3 +4135,210 @@ body.room-active {
     font-size: 8px;
   }
 }
+
+.wagerScale {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  color: #bcd3cb;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.wagerScale span {
+  position: relative;
+  padding-top: 6px;
+  white-space: nowrap;
+}
+
+.wagerScale span::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 1px;
+  height: 4px;
+  background: rgb(224 247 237 / 55%);
+}
+
+.scoreboardTitle {
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid rgb(255 255 255 / 13%);
+  color: #dffff2;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.scoreboard {
+  display: grid;
+  gap: 2px;
+  margin-top: 3px;
+}
+
+.scoreboardRow {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  color: #dbece5;
+  font-size: 10px;
+}
+
+.scoreboardRow strong {
+  min-width: 40px;
+  text-align: right;
+}
+
+/* Mobile poker controls: keep bets and core actions in two compact rows. */
+@media (max-width: 860px) {
+  #roomView:not(.hidden) {
+    grid-template-rows: 40px minmax(300px, 1fr) 96px;
+  }
+
+  .room-active .playbar {
+    padding: 4px;
+    overflow: visible;
+  }
+
+  .room-active .playbar > div:first-child,
+  .room-active .seatActionCluster,
+  .room-active .quickBets,
+  .room-active .wagerHint {
+    display: none;
+  }
+
+  .room-active .playbar.canPrepare .seatActionCluster {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-column: 1 / -1;
+    gap: 3px;
+  }
+
+  .room-active .playbar.canPrepare .seatActionCluster button {
+    min-height: 28px;
+    padding: 0 3px;
+    font-size: 9px;
+  }
+
+  .room-active .actions {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  .room-active .wagerPanel {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+    padding: 2px 5px;
+  }
+
+  .room-active .wagerHeader {
+    grid-template-columns: auto 1fr 48px;
+    gap: 5px;
+  }
+
+  .room-active .wagerHeader input {
+    min-height: 22px;
+    font-size: 10px;
+  }
+
+  .room-active .wagerHeader strong {
+    font-size: 15px;
+  }
+
+  .room-active .amountRange {
+    min-height: 18px;
+  }
+
+  .room-active .wagerScale {
+    font-size: 8px;
+  }
+
+  .room-active .wagerScale span {
+    padding-top: 3px;
+  }
+
+  .room-active .wagerScale span::before {
+    height: 3px;
+  }
+
+  .room-active .actionButtons {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 3px;
+  }
+
+  .room-active .actionButtons button {
+    min-height: 30px;
+    padding: 0 2px;
+    font-size: 10px;
+  }
+
+  .room-active .boardLine .card {
+    width: clamp(42px, 10vw, 52px);
+  }
+
+  .room-active .boardLine .cardRank {
+    font-size: 25px;
+  }
+
+  .room-active .boardLine .cardSuit {
+    font-size: 22px;
+  }
+
+  .room-active .settlementPanel {
+    max-height: 180px;
+    overflow-y: auto;
+  }
+
+  .room-active .scoreboardTitle,
+  .room-active .scoreboardRow {
+    font-size: 9px;
+  }
+}
+
+/* The manual landscape mode deliberately uses a different, lower-chrome table layout. */
+@media (max-width: 860px) {
+  body.tableLandscape.room-active .topbar {
+    display: none;
+  }
+
+  body.tableLandscape.room-active #roomView:not(.hidden) {
+    grid-template-rows: 28px minmax(180px, 1fr) 76px;
+  }
+
+  body.tableLandscape.room-active .tableHead {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  body.tableLandscape.room-active .tableHead > :not(.orientationBtn) {
+    display: none;
+  }
+
+  body.tableLandscape.room-active .orientationBtn {
+    min-height: 24px;
+    padding: 0 7px;
+    font-size: 9px;
+  }
+
+  body.tableLandscape.room-active .tableSurface {
+    min-height: 0;
+  }
+
+  body.tableLandscape.room-active .boardLine {
+    width: min(60vw, 520px);
+  }
+
+  body.tableLandscape.room-active .boardLine .card {
+    width: clamp(36px, 7vw, 58px);
+  }
+
+  body.tableLandscape.room-active .playbar {
+    margin-top: 2px;
+  }
+
+  body.tableLandscape.room-active .sideDrawer {
+    display: none;
+  }
+}

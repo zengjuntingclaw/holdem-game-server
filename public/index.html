@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Texas Hold'em MVP</title>
-  <link rel="stylesheet" href="/styles.css?v=0.1.67">
+  <link rel="stylesheet" href="/styles.css?v=0.1.68">
 </head>
 <body>
   <main class="shell">
@@ -164,7 +164,9 @@
                 <strong id="amountValue">20</strong>
                 <input id="amountInput" type="number" min="1" step="1" value="20" aria-label="下注金额">
               </div>
-              <input id="amountRange" class="amountRange" type="range" min="1" max="1000" step="1" value="20" aria-label="下注滑块">
+              <input id="amountRange" class="amountRange" type="range" min="1" max="1000" step="1" value="20" list="wagerTicks" aria-label="按小盲倍数下注滑块">
+              <datalist id="wagerTicks"></datalist>
+              <div id="wagerScale" class="wagerScale" aria-label="小盲刻度"></div>
               <div class="quickBets" aria-label="快捷下注">
                 <button type="button" class="secondary" data-wager-preset="min">最小</button>
                 <button type="button" class="secondary" data-wager-preset="slot2">2x</button>
@@ -180,13 +182,6 @@
               <button id="callBtn">跟注</button>
               <button id="betBtn">下注</button>
               <button id="raiseBtn">加注</button>
-            </div>
-            <div class="presetControls" aria-label="提前动作">
-              <span id="presetStatus">预设：无</span>
-              <button id="presetFoldBtn" type="button" class="secondary">预弃牌</button>
-              <button id="presetCheckCallBtn" type="button" class="secondary">预过/跟</button>
-              <button id="presetBetRaiseBtn" type="button" class="secondary">预下注/加注</button>
-              <button id="presetClearBtn" type="button" class="ghost">清除</button>
             </div>
           </div>
         </section>
@@ -298,6 +293,6 @@
   </main>
 
   <div id="toastStack" class="toastStack" aria-live="polite" aria-atomic="false"></div>
-  <script src="/app.js?v=0.1.67"></script>
+  <script src="/app.js?v=0.1.68"></script>
 </body>
 </html>

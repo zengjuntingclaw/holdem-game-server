@@ -2423,6 +2423,7 @@ function roomStateFor(room, viewerId) {
     },
     version: APP_VERSION,
     updatedAt: DEPLOYED_AT,
+    settlement: { scoreboard: roomScoreboard(room) },
     seats: room.seats.map((player, seat) => player ? {
       seat,
       userId: player.userId,
@@ -2443,6 +2444,28 @@ function roomStateFor(room, viewerId) {
     spectators: roomSpectators(room),
     messages: room.messages.slice(-30)
   };
+}
+
+function roomScoreboard(room) {
+  if (isTestRoom(room)) {
+    return occupiedSeats(room).map((player) => {
+      const chips = player.chips + (player.bet || 0);
+      return {
+        username: player.username,
+        buyIn: room.settings.startingChips,
+        chips,
+        net: chips - room.settings.startingChips,
+        handsPlayed: room.game.handNumber || 0
+      };
+    }).sort((a, b) => b.net - a.net);
+  }
+  return db.prepare(`
+    SELECT username, buy_in_chips AS buyIn, final_chips AS chips,
+           net_chips AS net, hands_played AS handsPlayed
+    FROM room_participants
+    WHERE room_id = ?
+    ORDER BY net_chips DESC, joined_at ASC
+  `).all(room.id);
 }
 
 function roomSpectators(room) {

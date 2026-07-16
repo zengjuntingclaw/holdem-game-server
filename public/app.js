@@ -114,10 +114,6 @@ document.querySelectorAll("[data-wager-preset]").forEach((button) => {
   button.addEventListener("click", () => chooseWagerPreset(button.dataset.wagerPreset));
 });
 $("#allInBtn").addEventListener("click", chooseAllIn);
-$("#presetFoldBtn").addEventListener("click", () => sendPresetAction("fold"));
-$("#presetCheckCallBtn").addEventListener("click", () => sendPresetAction("checkCall"));
-$("#presetBetRaiseBtn").addEventListener("click", () => sendPresetAction("betRaise"));
-$("#presetClearBtn").addEventListener("click", () => sendPresetAction("clear"));
 $("#chatForm").addEventListener("submit", (event) => {
   event.preventDefault();
   const input = $("#chatInput");
@@ -1180,7 +1176,7 @@ function renderRoom() {
   }
   $("#lastAction").innerHTML = fairnessHtml(snapshot.game);
   updateFairnessVerification(snapshot.game);
-  renderSettlement(snapshot.game);
+  renderSettlement(snapshot.game, snapshot.settlement);
   renderSpectators(snapshot.spectators || []);
 
   const acting = snapshot.seats[snapshot.game.actingSeat];
@@ -1210,7 +1206,6 @@ function renderRoom() {
   renderWagerControls(snapshot, mySeat, isMyTurn, activeHand);
   $("#randomAvatarBtn").disabled = !mySeat || activeHand || !state.avatars.length;
   $("#dealerTipBtn").disabled = !mySeat || activeHand;
-  renderPresetControls(snapshot, mySeat, activeHand);
   $("#startHandBtn").disabled = !snapshot.room.canStart;
   const nextHandRemainingMs = Math.max(0, Number(snapshot.game.nextHandStartsAt || 0) - (Date.now() - state.serverOffsetMs));
   $("#startHandBtn").textContent = nextHandRemainingMs > 0
@@ -1269,11 +1264,13 @@ function renderWagerControls(snapshot, mySeat, isMyTurn, activeHand) {
   const current = clampNumber(Number(state.lastWagerAmount || input.value || min), min, max);
   range.min = min;
   range.max = max;
-  range.step = 1;
+  const smallBlind = Math.max(1, Number(snapshot.room.smallBlind || 1));
+  range.step = smallBlind;
   range.value = current;
   updateRangeFill(range);
   input.min = min;
   input.max = max;
+  input.step = smallBlind;
   input.value = current;
   range.disabled = !canAdjust;
   input.disabled = !canAdjust;
@@ -1293,29 +1290,26 @@ function renderWagerControls(snapshot, mySeat, isMyTurn, activeHand) {
   document.querySelectorAll("#allInBtn").forEach((button) => {
     button.disabled = !canAdjust;
   });
-  $("#presetBetRaiseBtn").textContent = snapshot.game.currentBet > 0 ? "预加注" : "预下注";
+  renderWagerScale(min, max, smallBlind);
   $("#actionButtons").classList.toggle("isMyTurn", Boolean(isMyTurn));
 }
 
-function renderPresetControls(snapshot, mySeat, activeHand) {
-  const canPreset = Boolean(mySeat) && activeHand && mySeat.inHand && !mySeat.folded && !mySeat.allIn;
-  const canPresetBetRaise = canPreset && (snapshot.game.currentBet === 0 || Boolean(mySeat?.canRaise));
-  const pending = mySeat?.pendingAction;
-  const amount = pending?.amount ? ` ${pending.amount}` : "";
-  const text = pending
-    ? {
-      fold: "预设：弃牌",
-      checkCall: "预设：过牌/跟注",
-      betRaise: `预设：下注/加注${amount}`
-    }[pending.action] || "预设：已设置"
-    : "预设：无";
-  $("#presetStatus").textContent = text;
-  ["#presetFoldBtn", "#presetCheckCallBtn", "#presetBetRaiseBtn", "#presetClearBtn"].forEach((selector) => {
-    const button = $(selector);
-    if (button) button.disabled = !canPreset;
-  });
-  $("#presetBetRaiseBtn").disabled = !canPresetBetRaise;
-  $("#presetClearBtn").disabled = !canPreset || !pending;
+function renderWagerScale(min, max, smallBlind) {
+  const ticks = $("#wagerTicks");
+  const scale = $("#wagerScale");
+  if (!ticks || !scale) return;
+  const multipliers = [1, 2, 4, 8];
+  const values = [...new Set([
+    min,
+    ...multipliers.map((multiple) => clampNumber(smallBlind * multiple, min, max)),
+    max
+  ])].sort((a, b) => a - b);
+  ticks.innerHTML = values.map((value) => `<option value="${value}"></option>`).join("");
+  scale.innerHTML = values.map((value) => {
+    const multiple = value / smallBlind;
+    const label = Number.isInteger(multiple) ? `${multiple}×盲` : value;
+    return `<span>${label}</span>`;
+  }).join("");
 }
 
 function seatPosition(index, totalSeats) {
@@ -1449,7 +1443,7 @@ function updateCountdown(snapshot, mySeat) {
   state.countdownTimer = setInterval(render, 250);
 }
 
-function renderSettlement(game) {
+function renderSettlement(game, settlement = {}) {
   const panel = $("#settlementPanel");
   if (game.status !== "showdown" || !game.winners?.length) {
     panel.classList.add("hidden");
@@ -1470,6 +1464,18 @@ function renderSettlement(game) {
       ${winner.bestCards?.length ? `<div class="settlementBestCards"><span class="settlementBestLabel">最佳5张</span>${winner.bestCards.map(cardHtml).join("")}</div>` : ""}
       </div>
     `).join("")}
+    ${(settlement.scoreboard || []).length ? `
+      <div class="scoreboardTitle">本房积分结算</div>
+      <div class="scoreboard">
+        ${settlement.scoreboard.map((player) => `
+          <div class="scoreboardRow">
+            <span>${escapeHtml(player.username)}</span>
+            <span>${player.chips} / ${player.buyIn}</span>
+            <strong class="${player.net >= 0 ? "gain" : "loss"}">${player.net >= 0 ? "+" : ""}${player.net}</strong>
+          </div>
+        `).join("")}
+      </div>
+    ` : ""}
   `;
   panel.classList.remove("hidden");
 }
