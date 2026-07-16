@@ -57,7 +57,8 @@ const state = {
   countdownAlertKey: "",
   version: CLIENT_VERSION,
   lastRoomId: localStorage.getItem("pokerLastRoomId") || "",
-  lastWagerAmount: Number(localStorage.getItem("pokerLastWagerAmount") || DEFAULT_WAGER_AMOUNT)
+  lastWagerAmount: Number(localStorage.getItem("pokerLastWagerAmount") || DEFAULT_WAGER_AMOUNT),
+  preferredOrientation: localStorage.getItem("pokerPreferredOrientation") || "portrait"
 };
 
 const authView = $("#authView");
@@ -81,6 +82,7 @@ $("#roomLookupInput").addEventListener("keydown", (event) => {
 });
 $("#copyRoomIdBtn").addEventListener("click", copyRoomId);
 $("#backLobbyBtn").addEventListener("click", attemptBackLobby);
+$("#orientationBtn").addEventListener("click", toggleTableOrientation);
 $("#startHandBtn").addEventListener("click", () => send({ type: "startHand" }));
 $("#readyBtn").addEventListener("click", toggleReady);
 $("#standBtn").addEventListener("click", attemptStand);
@@ -148,6 +150,35 @@ $("#dealerSpot").addEventListener("click", (event) => {
 });
 
 boot();
+
+function applyTableOrientation() {
+  const landscape = state.preferredOrientation === "landscape";
+  document.body.classList.toggle("tableLandscape", landscape);
+  const button = $("#orientationBtn");
+  if (!button) return;
+  button.textContent = landscape ? "竖屏牌桌" : "横屏牌桌";
+  button.setAttribute("aria-pressed", String(landscape));
+  button.title = landscape ? "切换回竖屏布局" : "切换为横屏布局";
+}
+
+async function toggleTableOrientation() {
+  const next = state.preferredOrientation === "landscape" ? "portrait" : "landscape";
+  state.preferredOrientation = next;
+  localStorage.setItem("pokerPreferredOrientation", next);
+  applyTableOrientation();
+
+  // Orientation locking is only available in a fullscreen mobile browser.
+  try {
+    if (next === "landscape" && !document.fullscreenElement) {
+      await document.documentElement.requestFullscreen?.();
+    }
+    if (screen.orientation?.lock) {
+      await screen.orientation.lock(next);
+    }
+  } catch {
+    showToast(next === "landscape" ? "已切换横屏布局；请旋转设备以获得最佳体验。" : "已切换竖屏布局。");
+  }
+}
 
 async function boot() {
   renderRulesSidebar();
@@ -647,6 +678,7 @@ function showRoom() {
   $("#chatDrawer")?.classList.remove("hidden");
   closeSupportDrawer();
   $("#supportDrawer")?.classList.add("hidden");
+  applyTableOrientation();
 }
 
 function attemptBackLobby() {

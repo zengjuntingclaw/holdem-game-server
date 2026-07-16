@@ -460,6 +460,11 @@ p {
   margin-bottom: 16px;
 }
 
+.orientationBtn {
+  min-width: 108px;
+  color: #dffff2;
+}
+
 .roomIdPill {
   width: auto;
   min-height: 30px;
@@ -2491,6 +2496,197 @@ p {
   }
 }
 
+/* Reference-style mobile poker table: a wide blue felt with player panels around it. */
+@media (max-width: 860px) {
+  body.tableLandscape {
+    background-position: center;
+  }
+
+  .tableLandscape .shell {
+    width: min(100%, 980px);
+    padding: 4px 0 10px;
+  }
+
+  .tableLandscape .topbar,
+  .tableLandscape .tableHead,
+  .tableLandscape .playbar > :first-child,
+  .tableLandscape .presetControls,
+  .tableLandscape .seatActionCluster {
+    display: none;
+  }
+
+  .tableLandscape .tableHead {
+    margin: 0;
+  }
+
+  .tableLandscape .tableSurface {
+    min-height: min(72vw, 500px);
+    border-width: 9px;
+    border-radius: 48% / 44%;
+  }
+
+  .tableLandscape .boardLine {
+    top: 48%;
+    width: min(56vw, 510px);
+    min-height: 114px;
+    padding: 10px 16px;
+    gap: 14px;
+    flex-direction: row;
+  }
+
+  .tableLandscape .label,
+  .tableLandscape .pot span {
+    margin-bottom: 4px;
+    font-size: 12px;
+  }
+
+  .tableLandscape .boardLine .cards {
+    min-height: 48px;
+    gap: 5px;
+  }
+
+  .tableLandscape .boardLine .card {
+    width: clamp(30px, 6vw, 48px);
+    font-size: 11px;
+  }
+
+  .tableLandscape .boardLine .cardRank,
+  .tableLandscape .boardLine .cardSuit {
+    font-size: clamp(16px, 3.2vw, 25px);
+  }
+
+  .tableLandscape .pot {
+    min-width: 58px;
+    padding: 5px 8px;
+  }
+
+  .tableLandscape .pot strong {
+    font-size: 23px;
+  }
+
+  .tableLandscape .dealerSpot {
+    width: 54px;
+    min-width: 54px;
+    min-height: 54px;
+    border-radius: 10px;
+  }
+
+  .tableLandscape .dealerSpot span {
+    display: none;
+  }
+
+  .tableLandscape .seat {
+    width: clamp(92px, 17vw, 140px);
+    min-height: 58px;
+    grid-template-columns: 32px 1fr;
+    gap: 5px;
+    padding: 5px;
+    border-radius: 8px;
+  }
+
+  .tableLandscape .seat.empty {
+    width: 52px;
+    min-height: 30px;
+    padding: 3px;
+  }
+
+  .tableLandscape .seat.empty button {
+    min-height: 24px;
+    padding: 0 7px;
+    font-size: 10px;
+  }
+
+  .tableLandscape .seatAvatar {
+    width: 32px;
+  }
+
+  .tableLandscape .seatBody {
+    gap: 3px;
+  }
+
+  .tableLandscape .seatTop {
+    gap: 3px;
+  }
+
+  .tableLandscape .seatName {
+    max-width: 48px;
+    font-size: 10px;
+  }
+
+  .tableLandscape .stack,
+  .tableLandscape .badge,
+  .tableLandscape .seat .hint {
+    font-size: 8px;
+  }
+
+  .tableLandscape .chipIcon {
+    width: 10px;
+    margin-right: 2px;
+  }
+
+  .tableLandscape .badges {
+    gap: 2px;
+  }
+
+  .tableLandscape .badge {
+    padding: 1px 3px;
+  }
+
+  .tableLandscape .seat .cards {
+    gap: 2px;
+  }
+
+  .tableLandscape .seat .card {
+    width: 23px;
+    border-radius: 3px;
+    font-size: 7px;
+  }
+
+  .tableLandscape .tableStartBtn {
+    top: calc(48% + 66px);
+    min-width: 104px;
+    min-height: 28px;
+    padding: 0 9px;
+    font-size: 10px;
+  }
+
+  .tableLandscape .turnCountdown {
+    top: 14%;
+    min-width: 52px;
+    padding: 3px 6px;
+  }
+
+  .tableLandscape .turnCountdown span { font-size: 9px; }
+  .tableLandscape .turnCountdown strong { font-size: 22px; }
+
+  .tableLandscape .playbar {
+    margin-top: 6px;
+    padding: 7px;
+  }
+
+  .tableLandscape .actions {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .tableLandscape .wagerPanel { display: none; }
+
+  .tableLandscape .actionButtons {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+  }
+
+  .tableLandscape .actionButtons button {
+    min-width: 0;
+    min-height: 34px;
+    padding: 0 4px;
+    font-size: 11px;
+  }
+
+  .tableLandscape .sideDrawer { display: none; }
+}
+
 @keyframes floatPop {
   0% {
     opacity: 0;
@@ -3751,5 +3947,35 @@ body.room-active {
 
   .room-active .sideToggle {
     bottom: 111px;
+  }
+}
+
+/* Keep drawer handles out of the mobile action deck (notably iOS Safari). */
+@media (max-width: 860px) and (orientation: portrait) {
+  .room-active .sideToggle {
+    bottom: calc(192px + env(safe-area-inset-bottom, 0px));
+    width: 54px;
+    min-height: 28px;
+    padding: 0 3px;
+    border-radius: 6px;
+    font-size: 9px;
+    line-height: 1;
+    box-shadow: 0 7px 16px rgb(0 0 0 / 34%);
+  }
+
+  .room-active .spectatorsDrawer .sideToggle {
+    right: -12px;
+  }
+
+  .room-active .chatDrawer .sideToggle {
+    right: -70px;
+  }
+
+  .room-active .rulesDrawer .sideToggle {
+    left: -12px;
+  }
+
+  .room-active .feedbackDrawer .sideToggle {
+    left: -70px;
   }
 }
