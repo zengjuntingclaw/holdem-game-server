@@ -248,6 +248,22 @@ function initDatabase() {
     );
     CREATE INDEX IF NOT EXISTS idx_room_actions_room_hand ON room_actions(room_id, hand_number, action_index);
     CREATE INDEX IF NOT EXISTS idx_room_actions_user_id ON room_actions(user_id, created_at);
+    CREATE TABLE IF NOT EXISTS room_settlements (
+      room_id TEXT NOT NULL,
+      hand_number INTEGER NOT NULL,
+      user_id TEXT NOT NULL,
+      username TEXT NOT NULL,
+      chips_before INTEGER NOT NULL,
+      chips_after INTEGER NOT NULL,
+      delta INTEGER NOT NULL,
+      committed INTEGER NOT NULL DEFAULT 0,
+      result TEXT NOT NULL DEFAULT '',
+      is_winner INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (room_id, hand_number, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_room_settlements_room_hand ON room_settlements(room_id, hand_number);
+    CREATE INDEX IF NOT EXISTS idx_room_settlements_room_user ON room_settlements(room_id, user_id, hand_number);
   `);
   return database;
 }
@@ -692,6 +708,46 @@ function recordHandEnd(room) {
   });
 }
 
+function recordHandSettlement(room) {
+  const game = room.game;
+  const now = Date.now();
+  const winners = game.winners || [];
+  const rows = [];
+  for (const player of occupiedSeats(room)) {
+    const chipsBefore = Number.isFinite(player.startHandChips) ? player.startHandChips : player.chips;
+    const chipsAfter = player.chips;
+    const delta = chipsAfter - chipsBefore;
+    rows.push({
+      roomId: room.id,
+      handNumber: game.handNumber,
+      userId: player.userId,
+      username: player.username,
+      chipsBefore,
+      chipsAfter,
+      delta,
+      committed: player.committed || 0,
+      result: player.result || "",
+      isWinner: winners.some((winner) => winner.userId === player.userId) ? 1 : 0,
+      createdAt: now
+    });
+  }
+  room.lastSettlement = rows;
+  if (isTestRoom(room)) return;
+  const stmt = db.prepare(`
+    INSERT OR REPLACE INTO room_settlements (
+      room_id, hand_number, user_id, username, chips_before, chips_after,
+      delta, committed, result, is_winner, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  for (const row of rows) {
+    stmt.run(
+      row.roomId, row.handNumber, row.userId, row.username,
+      row.chipsBefore, row.chipsAfter, row.delta, row.committed,
+      row.result, row.isWinner, row.createdAt
+    );
+  }
+}
+
 function syncRoomAccounting(room) {
   if (isTestRoom(room)) return;
   const now = Date.now();
@@ -733,7 +789,16 @@ function roomHistory(roomId) {
     ORDER BY hand_number DESC
     LIMIT 50
   `).all(record.id);
-  return { room: record, participants, dealerTips: tips, hands, stats: roomStats(record.id) };
+  const settlements = db.prepare(`
+    SELECT room_id AS roomId, hand_number AS handNumber, user_id AS userId, username,
+           chips_before AS chipsBefore, chips_after AS chipsAfter, delta, committed,
+           result, is_winner AS isWinner, created_at AS createdAt
+    FROM room_settlements
+    WHERE room_id = ?
+    ORDER BY hand_number DESC, delta DESC
+    LIMIT 300
+  `).all(record.id);
+  return { room: record, participants, dealerTips: tips, hands, settlements, stats: roomStats(record.id) };
 }
 
 function roomStats(roomId) {
@@ -936,6 +1001,24 @@ async function handleApi(req, res, url) {
       const room = rooms.get(roomId);
       if (!room) return json(res, 404, { error: "房间不存在或当前不在线" });
       return json(res, 200, { room: publicRoom(room) });
+    }
+
+    if (req.method === "GET" && url.pathname.startsWith("/api/history/rooms/") && url.pathname.endsWith("/settlements")) {
+      const roomId = decodeURIComponent(url.pathname.slice("/api/history/rooms/".length, -"/settlements".length)).trim().toUpperCase();
+      if (!roomId) return json(res, 400, { error: "缺少房间号" });
+      const record = db.prepare("SELECT id FROM room_records WHERE id = ?").get(roomId);
+      if (!record) return json(res, 404, { error: "没有找到这个房间记录" });
+      const limit = clampInt(url.searchParams.get("limit"), 300, 1, 2000);
+      const rows = db.prepare(`
+        SELECT room_id AS roomId, hand_number AS handNumber, user_id AS userId, username,
+               chips_before AS chipsBefore, chips_after AS chipsAfter, delta, committed,
+               result, is_winner AS isWinner, created_at AS createdAt
+        FROM room_settlements
+        WHERE room_id = ?
+        ORDER BY hand_number DESC, delta DESC
+        LIMIT ?
+      `).all(roomId, limit);
+      return json(res, 200, { roomId, settlements: rows });
     }
 
     if (req.method === "GET" && url.pathname.startsWith("/api/history/rooms/")) {
@@ -1470,6 +1553,7 @@ function createRoom(name, owner, settings = {}) {
     nextHandTimer: null,
     disconnectTimers: new Map(),
     chipAnimations: [],
+    lastSettlement: [],
     music: {
       mode: "single",
       startedAt: Date.now(),
@@ -1786,6 +1870,7 @@ function startHand(room) {
     player.ready = false;
     player.pendingAction = null;
     player.result = "";
+    player.startHandChips = player.chips;
   }
 
   game.button = nextSeat(room, game.button, (player) => player.inHand);
@@ -2179,6 +2264,7 @@ function awardSingleWinner(room, player) {
   revealFairProof(room);
   game.lastAction = `${player.username} 赢得本手`;
   recordHandEnd(room);
+  recordHandSettlement(room);
   autoReadyNextHand(room);
   scheduleNextHand(room);
 }
@@ -2236,6 +2322,7 @@ function showdown(room) {
   revealFairProof(room);
   game.lastAction = "摊牌结算";
   recordHandEnd(room);
+  recordHandSettlement(room);
   autoReadyNextHand(room);
   scheduleNextHand(room);
 }
@@ -2423,7 +2510,7 @@ function roomStateFor(room, viewerId) {
     },
     version: APP_VERSION,
     updatedAt: DEPLOYED_AT,
-    settlement: { scoreboard: roomScoreboard(room) },
+    settlement: { scoreboard: roomScoreboard(room), lastHand: room.lastSettlement || [] },
     seats: room.seats.map((player, seat) => player ? {
       seat,
       userId: player.userId,

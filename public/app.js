@@ -1441,6 +1441,18 @@ function renderSettlement(game, settlement = {}) {
       ${winner.bestCards?.length ? `<div class="settlementBestCards"><span class="settlementBestLabel">最佳5张</span>${winner.bestCards.map(cardHtml).join("")}</div>` : ""}
       </div>
     `).join("")}
+    ${(settlement.lastHand || []).length ? `
+      <div class="handPointsTitle">本手积分（所有人）</div>
+      <div class="handPoints">
+        ${([...settlement.lastHand].sort((a, b) => b.delta - a.delta)).map((row) => `
+          <div class="handPointRow${row.isWinner ? " isWinner" : ""}">
+            <span class="handPointName">${escapeHtml(row.username)}</span>
+            <span class="handPointResult">${escapeHtml(row.result || (row.delta === 0 ? "未参与" : ""))}</span>
+            <strong class="handPointDelta ${row.delta >= 0 ? "gain" : "loss"}">${row.delta >= 0 ? "+" : ""}${row.delta}</strong>
+          </div>
+        `).join("")}
+      </div>
+    ` : ""}
     ${(settlement.scoreboard || []).length ? `
       <div class="scoreboardTitle">本房积分结算</div>
       <div class="scoreboard">
